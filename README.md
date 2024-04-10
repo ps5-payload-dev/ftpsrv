@@ -1,26 +1,19 @@
-# PS5 FTP Payload
-ps5-payload-ftpsrv is a simple FTP server that can be executed on a Playstation 5
-that has been jailbroken via the [BD-J][bdj] or the [webkit][webkit] entry points.
+# ps5-payload-ftpsrv
+This is a simple FTP server that can be executed on a Playstation 5 that has
+been jailbroken via the [BD-J][bdj] or the [webkit][webkit] entry points.
 
 ## Building
 Assuming you have the [ps5-payload-sdk][sdk] installed on a POSIX machine,
 the FTP server can be compiled using the following two commands:
 ```console
-john@localhost:ps5-payload-ftpsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-john@localhost:ps5-payload-ftpsrv$ make
+john@localhost:ps5-payload-dev/ftpsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
+john@localhost:ps5-payload-dev/ftpsrv$ make
 ```
 
 To deploy the payload, first launch the [ps5-payload-elfldr][elfldr], then
 load ftpsrv.elf by issuing the following command:
 ```console
-john@localhost:ps5-payload-ftpsrv$ nc -q0 PS5_HOST 9021 < ftpsrv.elf
-```
-
-You can also compile the FTP server for POSIX-like systems (tested with Ubuntu
-and FreeBSD):
-```console
-john@localhost:ps5-payload-ftpsrv$ make -f Makefile.posix
-john@localhost:ps5-payload-ftpsrv$ ./ftpsrv.posix.elf
+john@localhost:ps5-payload-dev/ftpsrv$ nc -q0 PS5_HOST 9021 < ftpsrv.elf
 ```
 
 ## Features
@@ -40,7 +33,7 @@ to discuss the solution properly before you commit time and effort.
 ps5-payload-ftpsrv is licensed under the GPLv3+.
 
 [bdj]: https://github.com/john-tornblom/bdj-sdk
-[sdk]: https://github.com/john-tornblom/ps5-payload-sdk
+[sdk]: https://github.com/ps5-payload-dev/sdk
 [webkit]: https://github.com/Cryptogenic/PS5-IPV6-Kernel-Exploit
-[elfldr]: https://github.com/john-tornblom/ps5-payload-elfldr
-[issues]: https://github.com/john-tornblom/ps5-payload-ftpsrv/issues/new
+[elfldr]: https://github.com/ps5-payload-dev/elfldr
+[issues]: https://github.com/ps5-payload-dev/ftpsrv/issues/new
