@@ -1,4 +1,4 @@
-name: Build payload
+name: CI
 
 on:
   push:
@@ -20,33 +20,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-    - name: Checkout
-      uses: actions/checkout@v3
-
-    - name: Checkout
+    - name: Checkout SDK
       uses: actions/checkout@v3
       with:
-        repository: john-tornblom/ps5-payload-sdk
-        path: ps5-payload-sdk
+        repository: ps5-payload-dev/sdk
+        path: sdk
 
     - name: Setup SDK
-      working-directory: ps5-payload-sdk
+      working-directory: sdk
       run: |
         sudo apt update
-        sudo apt install wget build-essential clang clang-15 lld lld-15
-        make
-        make DESTDIR=${{ runner.tool_cache }}/ps5-payload-sdk install
+        sudo apt install clang-15 lld-15
+        make DESTDIR=${{ runner.tool_cache }}/ps5-payload-sdk clean install
         echo PS5_PAYLOAD_SDK=${{ runner.tool_cache }}/ps5-payload-sdk >> $GITHUB_ENV
-        echo PS5_HOST=ps5 >> $GITHUB_ENV
-        echo PS5_PORT=9020 >> $GITHUB_ENV
 
-    - name: Build
-      run: |
-        make clean all
+    - name: Checkout Payload
+      uses: actions/checkout@v3
 
-    - name: Upload payload
+    - name: Build Payload
+      run: make clean all
+
+    - name: Upload Payload
       uses: actions/upload-artifact@v3
       with:
         name: Payload
-        path: ./ftpsrv.elf
+        path: ./*.elf
         if-no-files-found: error
