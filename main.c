@@ -388,6 +388,7 @@ main() {
 
   syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
 
+  printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
   klog_printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
 
   while((pid=find_pid("ftpsrv.elf")) > 0) {
