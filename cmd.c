@@ -489,7 +489,9 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
+  uint8_t buf[PAGE_SIZE];
   struct stat st;
+  int len;
   int fd;
 
   if(!arg[0]) {
@@ -517,11 +519,13 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  if(sendfile(fd, env->data_fd, env->data_offset, 0, NULL, NULL, 0)) {
-    int ret = ftp_perror(env);
-    ftp_data_close(env);
-    close(fd);
-    return ret;
+  while((len=read(fd, buf, sizeof(buf))) != 0) {
+    if(len < 0 || len != write(env->data_fd, buf, len)) {
+      int ret = ftp_perror(env);
+      ftp_data_close(env);
+      close(fd);
+      return ret;
+    }
   }
 
   close(fd);
