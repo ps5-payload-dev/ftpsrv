@@ -32,9 +32,8 @@ along with this program; see the file COPYING. If not, see
 #include <sys/sysctl.h>
 #include <sys/syscall.h>
 
-#include <ps5/klog.h>
-
 #include "cmd.h"
+#include "log.h"
 
 
 /**
@@ -105,7 +104,7 @@ ftp_readline(int fd) {
   char c;
 
   if(!buffer) {
-    klog_perror("malloc");
+    FTP_LOG_PERROR("malloc");
     return NULL;
   }
 
@@ -137,7 +136,7 @@ ftp_readline(int fd) {
       buffer_backup = buffer;
       buffer = realloc(buffer, bufsize);
       if(!buffer) {
-	klog_perror("realloc");
+	FTP_LOG_PERROR("realloc");
 	free(buffer_backup);
 	return NULL;
       }
@@ -176,9 +175,15 @@ ftp_execute(ftp_env_t *env, char *line) {
  **/
 static int
 ftp_greet(ftp_env_t *env) {
-  const char *msg = "220 Service is ready\r\n";
-  size_t len = strlen(msg);
+  char msg[0x100];
+  size_t len;
 
+  snprintf(msg, sizeof(msg),
+	   "220-Welcome to ftpsrv.elf running on pid %d, compiled at %s %s\r\n",
+	   getpid(), __DATE__, __TIME__);
+  strncat(msg, "220 Service is ready\r\n", sizeof(msg)-1);
+
+  len = strlen(msg);
   if(write(env->active_fd, msg, len) != len) {
     return -1;
   }
@@ -255,7 +260,7 @@ ftp_serve(uint16_t port) {
   int srvfd;
 
   if(getifaddrs(&ifaddr) == -1) {
-    klog_perror("getifaddrs");
+    FTP_LOG_PERROR("getifaddrs");
     exit(EXIT_FAILURE);
   }
 
@@ -284,7 +289,7 @@ ftp_serve(uint16_t port) {
       continue;
     }
 
-    klog_printf("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
+    FTP_LOG_PRINTF("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
     ifaddr_wait = 0;
   }
 
@@ -295,12 +300,12 @@ ftp_serve(uint16_t port) {
   }
 
   if((srvfd=socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    klog_perror("socket");
+    FTP_LOG_PERROR("socket");
     return -1;
   }
 
   if(setsockopt(srvfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
-    klog_perror("setsockopt");
+    FTP_LOG_PERROR("setsockopt");
     return -1;
   }
 
@@ -310,12 +315,12 @@ ftp_serve(uint16_t port) {
   server_addr.sin_port = htons(port);
 
   if(bind(srvfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
-    klog_perror("bind");
+    FTP_LOG_PERROR("bind");
     return -1;
   }
 
   if(listen(srvfd, 5) != 0) {
-    klog_perror("listen");
+    FTP_LOG_PERROR("listen");
     return -1;
   }
 
@@ -323,7 +328,7 @@ ftp_serve(uint16_t port) {
 
   while(1) {
     if((connfd=accept(srvfd, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
-      klog_perror("accept");
+      FTP_LOG_PERROR("accept");
       break;
     }
 
@@ -346,17 +351,17 @@ find_pid(const char* name) {
   uint8_t *buf;
 
   if(sysctl(mib, 4, 0, &buf_size, 0, 0)) {
-    klog_perror("sysctl");
+    FTP_LOG_PERROR("sysctl");
     return -1;
   }
 
   if(!(buf=malloc(buf_size))) {
-    klog_perror("malloc");
+    FTP_LOG_PERROR("malloc");
     return -1;
   }
 
   if(sysctl(mib, 4, buf, &buf_size, 0, 0)) {
-    klog_perror("sysctl");
+    FTP_LOG_PERROR("sysctl");
     free(buf);
     return -1;
   }
@@ -388,13 +393,12 @@ main() {
 
   syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
 
-  printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
-  klog_printf("Socket server was compiled at %s %s\n", __DATE__, __TIME__);
+  FTP_LOG_PRINTF("FTP server was compiled at %s %s\n", __DATE__, __TIME__);
 
   while((pid=find_pid("ftpsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {
-      klog_perror("kill");
-      _exit(-1);
+      FTP_LOG_PERROR("kill");
+      exit(EXIT_FAILURE);
     }
     sleep(1);
   }
@@ -404,6 +408,6 @@ main() {
     sleep(3);
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }
 

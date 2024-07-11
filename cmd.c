@@ -34,6 +34,7 @@ along with this program; see the file COPYING. If not, see
 #include <sys/mount.h>
 
 #include "cmd.h"
+#include "log.h"
 
 
 #define IOVEC_ENTRY(x) {x ? x : 0, \
@@ -418,8 +419,6 @@ ftp_cmd_NOOP(ftp_env_t *env, const char* arg) {
 }
 
 
-
-
 /**
  * Establish a data connection with client.
  **/
@@ -491,6 +490,7 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
   uint8_t buf[PAGE_SIZE];
   struct stat st;
+  int err = 0;
   int len;
   int fd;
 
@@ -512,19 +512,22 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   }
 
   if(ftp_active_printf(env, "150 Opening data transfer\r\n")) {
-    return ftp_perror(env);
+    close(fd);
+    return -1;
   }
 
   if(ftp_data_open(env)) {
-    return ftp_perror(env);
+    err = ftp_perror(env);
+    close(fd);
+    return err;
   }
 
   while((len=read(fd, buf, sizeof(buf))) != 0) {
     if(len < 0 || len != write(env->data_fd, buf, len)) {
-      int ret = ftp_perror(env);
+      err = ftp_perror(env);
       ftp_data_close(env);
       close(fd);
-      return ret;
+      return err;
     }
   }
 
@@ -631,6 +634,7 @@ int
 ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
   uint8_t readbuf[0x4000];
   char pathbuf[PATH_MAX];
+  int err = 0;
   size_t len;
   int fd;
 
@@ -649,17 +653,17 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
   }
 
   if(ftp_data_open(env)) {
-    int ret = ftp_perror(env);
+    err = ftp_perror(env);
     close(fd);
-    return ret;
+    return err;
   }
 
   while((len=ftp_data_read(env, readbuf, sizeof(readbuf)))) {
     if(write(fd, readbuf, len) != len) {
-      int ret = ftp_perror(env);
+      err = ftp_perror(env);
       ftp_data_close(env);
       close(fd);
-      return ret;
+      return err;
     }
   }
 
@@ -712,9 +716,9 @@ ftp_cmd_USER(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_KILL(ftp_env_t *env, const char* arg) {
-  puts("[ftpsrv.elf] Server killed");
+  FTP_LOG_PUTS("Server killed");
   exit(EXIT_SUCCESS);
-  return 0;
+  return -1;
 }
 
 
