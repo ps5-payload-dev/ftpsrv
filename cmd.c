@@ -282,6 +282,30 @@ ftp_cmd_CDUP(ftp_env_t *env, const char* arg) {
 
 
 /**
+ *
+ **/
+int
+ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
+  char pathbuf[PATH_MAX];
+  mode_t mode = 0;
+  char* ptr;
+
+  if(!arg[0] || !(ptr=strstr(arg, " "))) {
+    return ftp_active_printf(env, "501 Usage: CHMOD <MODE> <PATH>\r\n");
+  }
+
+  mode = strtol(arg, 0, 8);
+  ftp_abspath(env, pathbuf, ptr+1);
+
+  if(chmod(pathbuf, mode)) {
+    return ftp_perror(env);
+  }
+
+  return ftp_active_printf(env, "200 OK\r\n");
+}
+
+
+/**
  * Change the working directory.
  **/
 int

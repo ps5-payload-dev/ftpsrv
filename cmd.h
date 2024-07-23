@@ -74,7 +74,7 @@ int ftp_cmd_USER(ftp_env_t *env, const char* arg);
  **/
 int ftp_cmd_KILL(ftp_env_t *env, const char* arg);
 int ftp_cmd_MTRW(ftp_env_t *env, const char* arg);
-
+int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
 
 /**
  * Error responses to unknown/unavailable FTP commands.

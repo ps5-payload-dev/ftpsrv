@@ -73,13 +73,16 @@ static ftp_command_t commands[] = {
   // custom commands
   {"KILL", ftp_cmd_KILL},
   {"MTRW", ftp_cmd_MTRW},
+  {"CHMOD", ftp_cmd_CHMOD},
+
+  // duplicates that ensure commands are 4 bytes long
+  {"XCUP", ftp_cmd_CWD},
+  {"XMKD", ftp_cmd_MKD},
+  {"XPWD", ftp_cmd_PWD},
+  {"XRMD", ftp_cmd_RMD},
 
   // not yet implemnted
-  {"XCUP", ftp_cmd_unavailable},
-  {"XMKD", ftp_cmd_unavailable},
-  {"XPWD", ftp_cmd_unavailable},
   {"XRCP", ftp_cmd_unavailable},
-  {"XRMD", ftp_cmd_unavailable},
   {"XRSQ", ftp_cmd_unavailable},
   {"XSEM", ftp_cmd_unavailable},
   {"XSEN", ftp_cmd_unavailable},
@@ -200,6 +203,7 @@ ftp_thread(void *args) {
   ftp_env_t env;
   bool running;
   char *line;
+  char* cmd;
 
   env.data_fd     = -1;
   env.passive_fd  = -1;
@@ -219,7 +223,13 @@ ftp_thread(void *args) {
       break;
     }
 
-    if(ftp_execute(&env, line)) {
+    puts(line);
+    cmd = line;
+    if(!strncmp(line, "SITE ", 5)) {
+      cmd = line + 5;
+    }
+
+    if(ftp_execute(&env, cmd)) {
       running = false;
     }
 
