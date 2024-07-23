@@ -47,6 +47,7 @@ typedef int (ftp_command_fn_t)(ftp_env_t* env, const char* arg);
 /**
  * Standard FTP commands.
  **/
+int ftp_cmd_APPE(ftp_env_t *env, const char* arg);
 int ftp_cmd_CDUP(ftp_env_t *env, const char* arg);
 int ftp_cmd_CWD (ftp_env_t *env, const char* arg);
 int ftp_cmd_DELE(ftp_env_t *env, const char* arg);

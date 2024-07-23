@@ -49,6 +49,7 @@ typedef struct ftp_command {
  * Lookup table for FTP commands.
  **/
 static ftp_command_t commands[] = {
+  {"APPE", ftp_cmd_APPE},
   {"CDUP", ftp_cmd_CDUP},
   {"CWD",  ftp_cmd_CWD},
   {"DELE", ftp_cmd_DELE},
