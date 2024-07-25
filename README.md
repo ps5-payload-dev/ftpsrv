@@ -2,18 +2,13 @@
 This is a simple FTP server that can be executed on a Playstation 5 that has
 been jailbroken via the [BD-J][bdj] or the [webkit][webkit] entry points.
 
-## Building
-Assuming you have the [ps5-payload-sdk][sdk] installed on a POSIX machine,
-the FTP server can be compiled using the following two commands:
-```console
-john@localhost:ps5-payload-dev/ftpsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-john@localhost:ps5-payload-dev/ftpsrv$ make
-```
+## Quick-start
+To deploy ps5-payload-ftpsrv, first launch the [ps5-payload-elfldr][elfldr],
+then load the payload as follows:
 
-To deploy the payload, first launch the [ps5-payload-elfldr][elfldr], then
-load ftpsrv.elf by issuing the following command:
 ```console
-john@localhost:ps5-payload-dev/ftpsrv$ nc -q0 PS5_HOST 9021 < ftpsrv.elf
+john@localhost:~$ export PS5_HOST=ps5
+john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.9/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
 ```
 
 ## Features
@@ -22,6 +17,14 @@ Furthermore, the payload supports a couple of custom SITE commands specifically
 for the PS5 (executed without prepending SITE). In particular:
  - KILL - kill the FTP server.
  - MTRW - remount /system and /system_ex with write permissions.
+
+## Building
+Assuming you have the [ps5-payload-sdk][sdk] installed on a POSIX machine,
+the FTP server can be compiled using the following two commands:
+```console
+john@localhost:ps5-payload-dev/ftpsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
+john@localhost:ps5-payload-dev/ftpsrv$ make
+```
 
 ## Reporting Bugs
 If you encounter problems with ps5-payload-ftpsrv, please [file a github issue][issues].
