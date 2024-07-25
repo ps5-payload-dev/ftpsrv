@@ -502,7 +502,7 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 
   env->data_offset = atol(arg);
 
-  return ftp_active_printf(env, "200 REST OK\r\n");
+  return ftp_active_printf(env, "350 REST OK\r\n");
 }
 
 
@@ -656,65 +656,17 @@ ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
+  off_t off = env->data_offset;
   uint8_t readbuf[0x4000];
   char pathbuf[PATH_MAX];
   int err = 0;
   size_t len;
   int fd;
+
+  env->data_offset = 0;
 
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: STOR <FILENAME>\r\n");
-  }
-
-  ftp_abspath(env, pathbuf, arg);
-  if((fd=open(pathbuf, O_CREAT | O_WRONLY | O_TRUNC, 0777)) < 0) {
-    return ftp_perror(env);
-  }
-
-  if(ftp_active_printf(env, "150 Opening data transfer\r\n")) {
-    close(fd);
-    return -1;
-  }
-
-  if(ftp_data_open(env)) {
-    err = ftp_perror(env);
-    close(fd);
-    return err;
-  }
-
-  while((len=ftp_data_read(env, readbuf, sizeof(readbuf)))) {
-    if(write(fd, readbuf, len) != len) {
-      err = ftp_perror(env);
-      ftp_data_close(env);
-      close(fd);
-      return err;
-    }
-  }
-
-  close(fd);
-
-  if(ftp_data_close(env)) {
-    return ftp_perror(env);
-  }
-
-  return ftp_active_printf(env, "226 Data transfer complete\r\n");
-}
-
-
-
-/**
- * Append recieved data to a given file.
- **/
-int
-ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
-  uint8_t readbuf[0x4000];
-  char pathbuf[PATH_MAX];
-  int err = 0;
-  size_t len;
-  int fd;
-
-  if(!arg[0]) {
-    return ftp_active_printf(env, "501 Usage: APPE <FILENAME>\r\n");
   }
 
   ftp_abspath(env, pathbuf, arg);
@@ -722,7 +674,7 @@ ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  if(lseek(fd, env->data_offset, SEEK_CUR) < 0) {
+  if(lseek(fd, off, SEEK_CUR) < 0) {
     err = ftp_perror(env);
     close(fd);
     return err;
@@ -756,7 +708,6 @@ ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
 
   return ftp_active_printf(env, "226 Data transfer complete\r\n");
 }
-
 
 
 /**
