@@ -224,7 +224,6 @@ ftp_thread(void *args) {
       break;
     }
 
-    puts(line);
     cmd = line;
     if(!strncmp(line, "SITE ", 5)) {
       cmd = line + 5;
