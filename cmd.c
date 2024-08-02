@@ -717,6 +717,27 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
 }
 
 
+int
+ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
+  char pathbuf[PATH_MAX];
+  struct stat statbuf;
+
+  if(!arg[0]) {
+    return ftp_active_printf(env, "501 Usage: APPE <FILENAME>\r\n");
+  }
+
+  if(!env->data_offset) {
+    ftp_abspath(env, pathbuf, arg);
+    if(stat(pathbuf, &statbuf)) {
+      return ftp_perror(env);
+    }
+    env->data_offset = statbuf.st_size;
+  }
+
+  return ftp_cmd_STOR(env, arg);
+}
+
+
 /**
  * Return system type.
  **/
