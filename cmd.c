@@ -698,10 +698,17 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
       close(fd);
       return err;
     }
+    off += len;
+  }
+
+  if(ftruncate(fd, off)) {
+    err = ftp_perror(env);
+    ftp_data_close(env);
+    close(fd);
+    return err;
   }
 
   close(fd);
-
   if(ftp_data_close(env)) {
     return ftp_perror(env);
   }
