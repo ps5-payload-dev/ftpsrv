@@ -717,6 +717,9 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
 }
 
 
+/**
+ * Append to an existing file.
+ **/
 int
 ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
