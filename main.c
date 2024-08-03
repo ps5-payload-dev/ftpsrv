@@ -421,3 +421,9 @@ main() {
   return EXIT_SUCCESS;
 }
 
+
+/*
+  Local Variables:
+  c-file-style: "gnu"
+  End:
+*/
