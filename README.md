@@ -8,7 +8,7 @@ then load the payload as follows:
 
 ```console
 john@localhost:~$ export PS5_HOST=ps5
-john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.9/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
+john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.10/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
 ```
 
 ## Features
