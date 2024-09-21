@@ -3,12 +3,12 @@ This is a simple FTP server that can be executed on a Playstation 5 that has
 been jailbroken via the [BD-J][bdj] or the [webkit][webkit] entry points.
 
 ## Quick-start
-To deploy ps5-payload-ftpsrv, first launch the [ps5-payload-elfldr][elfldr],
-then load the payload as follows:
+To deploy ps5-payload-ftpsrv, first make sure [ps5-payload-elfldr][elfldr] is
+running, then load the payload as follows:
 
 ```console
 john@localhost:~$ export PS5_HOST=ps5
-john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.10/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
+john@localhost:~$ wget -q -O - https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.10.1/Payload.zip | gunzip -c -d | nc -q0 $PS5_HOST 9021
 ```
 
 ## Features
