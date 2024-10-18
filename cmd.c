@@ -527,8 +527,8 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  if(!S_ISREG(st.st_mode)) {
-    return ftp_active_printf(env, "550 Not a regular file\r\n");
+  if(S_ISDIR(st.st_mode)) {
+    return ftp_active_printf(env, "550 Not a file\r\n");
   }
 
   if((fd=open(pathbuf, O_RDONLY, 0)) < 0) {
