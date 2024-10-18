@@ -419,7 +419,7 @@ main() {
   // /dev/sflash0
   pid = getpid();
   if(kernel_set_ucred_authid(pid, 0x4801000000000013L)) {
-    FTP_LOG_PRINTF("%s", "Unable to change AuthID\n");
+    FTP_LOG_PUTS("Unable to change AuthID");
     return EXIT_FAILURE;
   }
 
