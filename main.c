@@ -410,7 +410,7 @@ main() {
   while((pid=find_pid("ftpsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {
       FTP_LOG_PERROR("kill");
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
     sleep(1);
   }
