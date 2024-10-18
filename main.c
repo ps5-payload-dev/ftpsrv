@@ -32,6 +32,8 @@ along with this program; see the file COPYING. If not, see
 #include <sys/sysctl.h>
 #include <sys/syscall.h>
 
+#include <ps5/kernel.h>
+
 #include "cmd.h"
 #include "log.h"
 
@@ -411,6 +413,14 @@ main() {
       exit(EXIT_FAILURE);
     }
     sleep(1);
+  }
+
+  // change authid so certain character devices can be read, e.g.,
+  // /dev/sflash0
+  pid = getpid();
+  if(kernel_set_ucred_authid(pid, 0x4801000000000013L)) {
+    FTP_LOG_PRINTF("%s", "Unable to change AuthID\n");
+    return EXIT_FAILURE;
   }
 
   while(1) {
