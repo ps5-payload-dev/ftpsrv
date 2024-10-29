@@ -261,10 +261,9 @@ ftp_thread(void *args) {
  * Serve FTP on a given port.
  **/
 static int
-ftp_serve(uint16_t port) {
+ftp_serve(uint16_t port, int notify_user) {
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
-  static int notify_user = 0;
   char ip[INET_ADDRSTRLEN];
   struct ifaddrs *ifaddr;
   int ifaddr_wait = 1;
@@ -303,9 +302,8 @@ ftp_serve(uint16_t port) {
       continue;
     }
 
-    if(!notify_user) {
-      notify("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
-      notify_user = 1;
+    if(notify_user) {
+      notify("Serving FTP on %s:%d (%s)", ip, port, ifa->ifa_name);
     }
     FTP_LOG_PRINTF("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
     ifaddr_wait = 0;
@@ -407,6 +405,7 @@ find_pid(const char* name) {
 int
 main() {
   uint16_t port = 2121;
+  int notify_user = 1;
   pid_t pid;
 
   syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
@@ -430,7 +429,8 @@ main() {
   }
 
   while(1) {
-    ftp_serve(port);
+    ftp_serve(port, notify_user);
+    notify_user = 0;
     sleep(3);
   }
 
