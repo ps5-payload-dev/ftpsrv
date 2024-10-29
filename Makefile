@@ -29,7 +29,7 @@ CFLAGS := -Wall -Werror
 
 all: $(ELF)
 
-$(ELF): main.c cmd.c
+$(ELF): main.c cmd.c notify.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

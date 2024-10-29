@@ -36,6 +36,7 @@ along with this program; see the file COPYING. If not, see
 
 #include "cmd.h"
 #include "log.h"
+#include "notify.h"
 
 
 /**
@@ -263,6 +264,7 @@ static int
 ftp_serve(uint16_t port) {
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
+  static int notify_user = 0;
   char ip[INET_ADDRSTRLEN];
   struct ifaddrs *ifaddr;
   int ifaddr_wait = 1;
@@ -301,6 +303,10 @@ ftp_serve(uint16_t port) {
       continue;
     }
 
+    if(!notify_user) {
+      notify("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
+      notify_user = 1;
+    }
     FTP_LOG_PRINTF("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
     ifaddr_wait = 0;
   }
