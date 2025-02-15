@@ -41,7 +41,7 @@ jobs:
       run: make clean all
 
     - name: Upload Payload
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Payload
         path: ./*.elf
