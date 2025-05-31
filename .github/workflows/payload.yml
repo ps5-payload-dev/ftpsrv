@@ -30,7 +30,7 @@ jobs:
       working-directory: sdk
       run: |
         sudo apt update
-        sudo apt install clang-15 lld-15
+        sudo apt install clang-18 lld-18
         make DESTDIR=${{ runner.tool_cache }}/ps5-payload-sdk clean install
         echo PS5_PAYLOAD_SDK=${{ runner.tool_cache }}/ps5-payload-sdk >> $GITHUB_ENV
 
