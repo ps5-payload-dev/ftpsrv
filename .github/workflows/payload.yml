@@ -4,11 +4,11 @@ on:
   push:
     paths-ignore:
       - "**/*.md"
-      - '**/*.txt'
+      - "**/*.txt"
   pull_request:
     paths-ignore:
       - "**/*.md"
-      - '**/*.txt'
+      - "**/*.txt"
   workflow_dispatch:
 
 concurrency:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  payload-build:
+  build:
     runs-on: ubuntu-latest
     steps:
 
