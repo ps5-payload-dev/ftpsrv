@@ -38,11 +38,34 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Build Payload
-      run: make clean all
+      run: |
+        make clean all
+        zip -r Payload.zip ftpsrv.elf
 
     - name: Upload Payload
       uses: actions/upload-artifact@v4
       with:
         name: Payload
-        path: ./*.elf
+        path: Payload.zip
         if-no-files-found: error
+
+  release:
+    needs: build
+    permissions:
+      contents: write
+
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: Payload
+          path: .
+
+      - name: Create GitHub Release (pre-release)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: true
+          files: Payload.zip
