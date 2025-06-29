@@ -273,7 +273,10 @@ ftp_cmd_CDUP(ftp_env_t *env, const char* arg) {
     }
   }
 
-  if(pos > 0) {
+  if(pos <= 0) {
+    env->cwd[0] = '/';
+    env->cwd[1] = '\0';
+  } else if(pos > 0) {
     env->cwd[pos] = '\0';
   }
 
