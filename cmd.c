@@ -30,8 +30,10 @@ along with this program; see the file COPYING. If not, see
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __FreeBSD__
 #include <sys/_iovec.h>
 #include <sys/mount.h>
+#endif
 
 #include "cmd.h"
 #include "log.h"
@@ -42,7 +44,7 @@ along with this program; see the file COPYING. If not, see
 #define IOVEC_SIZE(x) (sizeof(x) / sizeof(struct iovec))
 
 
-#ifdef __PROSPERO__
+#ifdef __SCE__
 struct tm *localtime_s(const time_t *t, struct tm* tm);
 #define LOCALTIME_R(t, tm) localtime_s(t, tm)
 #else
@@ -360,7 +362,7 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
-  char pathbuf[PATH_MAX+256+2];
+  char pathbuf[PATH_MAX*3];
   struct dirent *ent;
   const char *p = env->cwd;
   struct stat statbuf;
@@ -515,7 +517,7 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
-  uint8_t buf[PAGE_SIZE];
+  uint8_t buf[0x4000];
   struct stat st;
   int err = 0;
   int len;
@@ -813,6 +815,7 @@ ftp_cmd_unknown(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
+#ifdef __PROSPERO__
   struct iovec iov_sys[] = {
     IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/ssd0.system"),
     IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system"),
@@ -840,8 +843,10 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
   if(syscall(SYS_nmount, iov_sysex, IOVEC_SIZE(iov_sysex), MNT_UPDATE)) {
     return ftp_perror(env);
   }
-
   return ftp_active_printf(env, "226 /system and /system_ex remounted\r\n");
+#else
+  return ftp_cmd_unknown(env, arg);
+#endif
 }
 
 

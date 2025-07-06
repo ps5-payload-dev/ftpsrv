@@ -1,4 +1,4 @@
-/* Copyright (C) 2023 John Törnblom
+/* Copyright (C) 2025 John Törnblom
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -14,25 +14,17 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #include <arpa/inet.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <ifaddrs.h>
-#include <netinet/in.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-
-#include <sys/socket.h>
-#include <sys/sysctl.h>
-#include <sys/syscall.h>
-
-#include <ps5/kernel.h>
 
 #include "cmd.h"
 #include "log.h"
@@ -260,7 +252,7 @@ ftp_thread(void *args) {
 /**
  * Serve FTP on a given port.
  **/
-static int
+int
 ftp_serve(uint16_t port, int notify_user) {
   struct sockaddr_in server_addr;
   struct sockaddr_in client_addr;
@@ -276,8 +268,6 @@ ftp_serve(uint16_t port, int notify_user) {
     FTP_LOG_PERROR("getifaddrs");
     exit(EXIT_FAILURE);
   }
-
-  signal(SIGPIPE, SIG_IGN);
 
   // Enumerate all AF_INET IPs
   for(struct ifaddrs *ifa=ifaddr; ifa!=NULL; ifa=ifa->ifa_next) {
@@ -305,7 +295,7 @@ ftp_serve(uint16_t port, int notify_user) {
     if(notify_user) {
       notify("Serving FTP on %s:%d (%s)", ip, port, ifa->ifa_name);
     }
-    FTP_LOG_PRINTF("Serving FTP on %s:%d (%s)\n", ip, port, ifa->ifa_name);
+
     ifaddr_wait = 0;
   }
 
@@ -352,89 +342,6 @@ ftp_serve(uint16_t port, int notify_user) {
   }
 
   return close(srvfd);
-}
-
-
-/**
- * Fint the pid of a process with the given name.
- **/
-static pid_t
-find_pid(const char* name) {
-  int mib[4] = {1, 14, 8, 0};
-  pid_t mypid = getpid();
-  pid_t pid = -1;
-  size_t buf_size;
-  uint8_t *buf;
-
-  if(sysctl(mib, 4, 0, &buf_size, 0, 0)) {
-    FTP_LOG_PERROR("sysctl");
-    return -1;
-  }
-
-  if(!(buf=malloc(buf_size))) {
-    FTP_LOG_PERROR("malloc");
-    return -1;
-  }
-
-  if(sysctl(mib, 4, buf, &buf_size, 0, 0)) {
-    FTP_LOG_PERROR("sysctl");
-    free(buf);
-    return -1;
-  }
-
-  for(uint8_t *ptr=buf; ptr<(buf+buf_size);) {
-    int ki_structsize = *(int*)ptr;
-    pid_t ki_pid = *(pid_t*)&ptr[72];
-    char *ki_tdname = (char*)&ptr[447];
-
-    ptr += ki_structsize;
-    if(!strcmp(name, ki_tdname) && ki_pid != mypid) {
-      pid = ki_pid;
-    }
-  }
-
-  free(buf);
-
-  return pid;
-}
-
-
-/**
- * Launch payload.
- **/
-int
-main() {
-  uint16_t port = 2121;
-  int notify_user = 1;
-  pid_t pid;
-
-  syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
-
-  FTP_LOG_PRINTF("FTP server was compiled at %s %s\n", __DATE__, __TIME__);
-
-  while((pid=find_pid("ftpsrv.elf")) > 0) {
-    if(kill(pid, SIGKILL)) {
-      FTP_LOG_PERROR("kill");
-      return EXIT_FAILURE;
-    }
-    sleep(1);
-  }
-
-  // change authid so certain character devices can be read, e.g.,
-  // /dev/sflash0
-  pid = getpid();
-  if(kernel_set_ucred_authid(pid, 0x4801000000000013L)) {
-    FTP_LOG_PUTS("Unable to change AuthID");
-    return EXIT_FAILURE;
-  }
-
-  while(1) {
-    ftp_serve(port, notify_user);
-    notify_user = 0;
-    sleep(3);
-  }
-
-  return EXIT_SUCCESS;
 }
 
 

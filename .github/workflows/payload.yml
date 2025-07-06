@@ -39,8 +39,8 @@ jobs:
 
     - name: Build Payload
       run: |
-        make clean all
-        zip -r Payload.zip ftpsrv.elf
+        make -f Makefile.ps5 clean all
+        zip -r Payload.zip ftpsrv-ps5.elf
 
     - name: Upload Payload
       uses: actions/upload-artifact@v4

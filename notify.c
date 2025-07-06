@@ -38,5 +38,9 @@ notify(const char *fmt, ...) {
   vsnprintf(req.message, sizeof req.message, fmt, args);
   va_end(args);
 
+#ifdef __SCE__
   sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
+#else
+  puts(req.message);
+#endif
 }
