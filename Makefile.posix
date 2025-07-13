@@ -20,12 +20,12 @@ CFLAGS := -Wall -Werror
 
 all: $(ELF)
 
-$(ELF): main_posix.c srv.c cmd.c notify.c
+$(ELF): main_posix.c srv.c cmd_common.c cmd_posix.c notify.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
 	rm -f $(ELF)
 
 test: $(ELF)
-	./$^ &
+	./$^
 

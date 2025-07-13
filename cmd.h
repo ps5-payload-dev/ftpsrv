@@ -82,3 +82,33 @@ int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
  **/
 int ftp_cmd_unavailable(ftp_env_t *env, const char* arg);
 int ftp_cmd_unknown(ftp_env_t *env, const char* arg);
+
+
+/**
+ * Transmit a formatted string via an active connection.
+ **/
+int ftp_active_printf(ftp_env_t *env, const char *fmt, ...);
+
+
+/**
+ * Resolve a path to its absolute path.
+ **/
+void ftp_abspath(ftp_env_t *env, char *abspath, const char *path);
+
+
+/**
+ * Transmit an errno string via an active connection.
+ **/
+int ftp_perror(ftp_env_t *env);
+
+
+/**
+ * Open a new FTP data connection.
+ **/
+int ftp_data_open(ftp_env_t *env);
+
+
+/**
+ * Close an existing data connection.
+ **/
+int ftp_data_close(ftp_env_t *env);

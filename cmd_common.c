@@ -30,26 +30,8 @@ along with this program; see the file COPYING. If not, see
 #include <time.h>
 #include <unistd.h>
 
-#ifdef __FreeBSD__
-#include <sys/_iovec.h>
-#include <sys/mount.h>
-#endif
-
 #include "cmd.h"
 #include "log.h"
-
-
-#define IOVEC_ENTRY(x) {x ? x : 0, \
-			x ? strlen(x)+1 : 0}
-#define IOVEC_SIZE(x) (sizeof(x) / sizeof(struct iovec))
-
-
-#ifdef __SCE__
-struct tm *localtime_s(const time_t *t, struct tm* tm);
-#define LOCALTIME_R(t, tm) localtime_s(t, tm)
-#else
-#define LOCALTIME_R(t, tm) localtime_r(t, tm)
-#endif
 
 
 /**
@@ -82,10 +64,7 @@ ftp_mode_string(mode_t mode, char *buf) {
 }
 
 
-/**
- * Open a new FTP data connection.
- **/
-static int
+int
 ftp_data_open(ftp_env_t *env) {
   struct sockaddr_in data_addr;
   socklen_t addr_len;
@@ -137,10 +116,7 @@ ftp_data_read(ftp_env_t *env, void *buf, size_t count) {
 }
 
 
-/**
- * Close an existing data connection.
- **/
-static int
+int
 ftp_data_close(ftp_env_t *env) {
   if(!close(env->data_fd)) {
     return 0;
@@ -149,10 +125,8 @@ ftp_data_close(ftp_env_t *env) {
 }
 
 
-/**
- * Transmit a formatted string via an active connection.
- **/
-static int
+
+int
 ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
   char buf[0x1000];
   size_t len = 0;
@@ -172,10 +146,7 @@ ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
 }
 
 
-/**
- * Transmit an errno string via an active connection.
- **/
-static int
+int
 ftp_perror(ftp_env_t *env) {
   char buf[255];
 
@@ -187,10 +158,7 @@ ftp_perror(ftp_env_t *env) {
 }
 
 
-/**
- * Resolve a path to its absolute path.
- **/
-static void
+void
 ftp_abspath(ftp_env_t *env, char *abspath, const char *path) {
   char buf[PATH_MAX+1];
 
@@ -398,7 +366,7 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
     }
 
     ftp_mode_string(statbuf.st_mode, modebuf);
-    LOCALTIME_R((const time_t *)&(statbuf.st_ctim), &tm);
+    localtime_r((const time_t *)&(statbuf.st_ctim), &tm);
     strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &tm);
     ftp_data_printf(env, "%s %lu %lu %lu %llu %s %s\r\n", modebuf,
 		    statbuf.st_nlink, statbuf.st_uid, statbuf.st_gid,
@@ -786,7 +754,7 @@ ftp_cmd_USER(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_KILL(ftp_env_t *env, const char* arg) {
   FTP_LOG_PUTS("Server killed");
-  exit(EXIT_SUCCESS);
+  _exit(EXIT_SUCCESS);
   return -1;
 }
 
@@ -806,47 +774,6 @@ ftp_cmd_unavailable(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_unknown(ftp_env_t *env, const char* arg) {
   return ftp_active_printf(env, "502 Command not recognized\r\n");
-}
-
-
-
-/**
- * Remount read-only mount points with write permissions.
- **/
-int
-ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
-#ifdef __PROSPERO__
-  struct iovec iov_sys[] = {
-    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/ssd0.system"),
-    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system"),
-    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
-    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
-    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
-    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
-    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
-  };
-
-  struct iovec iov_sysex[] = {
-    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/ssd0.system_ex"),
-    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system_ex"),
-    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
-    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
-    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
-    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
-    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
-  };
-
-  if(syscall(SYS_nmount, iov_sys, IOVEC_SIZE(iov_sys), MNT_UPDATE)) {
-    return ftp_perror(env);
-  }
-
-  if(syscall(SYS_nmount, iov_sysex, IOVEC_SIZE(iov_sysex), MNT_UPDATE)) {
-    return ftp_perror(env);
-  }
-  return ftp_active_printf(env, "226 /system and /system_ex remounted\r\n");
-#else
-  return ftp_cmd_unknown(env, arg);
-#endif
 }
 
 
