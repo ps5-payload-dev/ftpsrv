@@ -18,8 +18,10 @@ along with this program; see the file COPYING. If not, see
 
 #include <stdio.h>
 
-#ifdef __PROSPERO__
+#if defined(__PROSPERO__)
 #include <ps5/klog.h>
+#elif defined( __ORBIS__)
+#include <ps4/klog.h>
 #else
 #define klog_puts(s)
 #define klog_printf(s, ...)

@@ -1,4 +1,4 @@
-name: CI
+name: PS4
 
 on:
   push:
@@ -11,19 +11,15 @@ on:
       - "**/*.txt"
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.ref }}-${{ github.event_name  }}
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
 
     - name: Checkout SDK
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
-        repository: ps5-payload-dev/sdk
+        repository: ps4-payload-dev/sdk
         path: sdk
 
     - name: Setup SDK
@@ -31,22 +27,21 @@ jobs:
       run: |
         sudo apt update
         sudo apt install clang-18 lld-18
-        make DESTDIR=${{ runner.tool_cache }}/ps5-payload-sdk clean install
-        echo PS5_PAYLOAD_SDK=${{ runner.tool_cache }}/ps5-payload-sdk >> $GITHUB_ENV
+        make DESTDIR=${{ runner.tool_cache }}/ps4-payload-sdk clean install
+        echo PS4_PAYLOAD_SDK=${{ runner.tool_cache }}/ps4-payload-sdk >> $GITHUB_ENV
 
     - name: Checkout Payload
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build Payload
       run: |
-        make -f Makefile.ps5 clean all
-        zip -r Payload.zip ftpsrv-ps5.elf
+        make -f Makefile.ps4 clean all
 
     - name: Upload Payload
       uses: actions/upload-artifact@v4
       with:
         name: Payload
-        path: Payload.zip
+        path: ftpsrv-ps4.elf
         if-no-files-found: error
 
   release:
@@ -68,4 +63,4 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: true
-          files: Payload.zip
+          files: ftpsrv-ps4.elf
