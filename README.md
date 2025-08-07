@@ -25,6 +25,13 @@ john@localhost:ftpsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
 john@localhost:ftpsrv$ make -f Makefile.ps5
 ```
 
+## Building for GNU/Linux systems
+Assuming you have a compiler toolchain installed on your GNU/Linux system,
+the FTP server can be compiled using the following two commands:
+```console
+john@localhost:ftpsrv$ make -f Makefile.posix
+```
+
 ## Reporting Bugs
 If you encounter problems with ftpsrv, please [file a github issue][issues].
 If you plan on sending pull requests which affect more than a few lines of code,
