@@ -14,7 +14,7 @@ Assuming you have the [ps4-payload-sdk][sdk-ps4] installed on a POSIX machine,
 the FTP server can be compiled using the following two commands:
 ```console
 john@localhost:ftpsrv$ export PS4_PAYLOAD_SDK=/opt/ps4-payload-sdk
-john@localhost:ftpsrv$ make
+john@localhost:ftpsrv$ make -f Makefile.ps4
 ```
 
 ## Building for the PS5
@@ -22,7 +22,7 @@ Assuming you have the [ps5-payload-sdk][sdk-ps5] installed on a POSIX machine,
 the FTP server can be compiled using the following two commands:
 ```console
 john@localhost:ftpsrv$ export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-john@localhost:ftpsrv$ make
+john@localhost:ftpsrv$ make -f Makefile.ps5
 ```
 
 ## Reporting Bugs
