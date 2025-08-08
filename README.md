@@ -27,7 +27,7 @@ john@localhost:ftpsrv$ make -f Makefile.ps5
 
 ## Building for GNU/Linux systems
 Assuming you have a compiler toolchain installed on your GNU/Linux system,
-the FTP server can be compiled using the following two commands:
+the FTP server can be compiled using the following command:
 ```console
 john@localhost:ftpsrv$ make -f Makefile.posix
 ```
