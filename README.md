@@ -1,6 +1,7 @@
 # ftpsrv
 This is a simple FTP server that can be executed on a Playstation 4 or
 Playstation 5 that has been jailbroken and is running an ELF loader.
+The FTP server accepts connection on port 2121.
 
 ## Features
 Client software that has been testing include gFTP, Filezilla, curl, and Thunar.
