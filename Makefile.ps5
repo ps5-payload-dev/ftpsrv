@@ -25,7 +25,8 @@ endif
 
 ELF := ftpsrv-ps5.elf
 
-CFLAGS := -Wall -Werror
+VERSION_TAG := $(shell git describe --abbrev=6 --dirty --always --tags)
+CFLAGS := -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\"
 
 all: $(ELF)
 
