@@ -25,8 +25,6 @@ int
 main() {
   uint16_t port = 2121;
 
-  FTP_LOG_PRINTF("FTP server was compiled at %s %s\n", __DATE__, __TIME__);
-
   signal(SIGPIPE, SIG_IGN);
 
   while(1) {

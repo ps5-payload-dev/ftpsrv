@@ -84,8 +84,6 @@ main() {
 
   syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
 
-  FTP_LOG_PRINTF("FTP server was compiled at %s %s\n", __DATE__, __TIME__);
-
   while((pid=find_pid("ftpsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {
       FTP_LOG_PERROR("kill");
