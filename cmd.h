@@ -17,7 +17,6 @@ along with this program; see the file COPYING. If not, see
 #pragma once
 
 #include <limits.h>
-#include <stdatomic.h>
 #include <netinet/in.h>
 #include <unistd.h>
 
