@@ -22,7 +22,7 @@ along with this program; see the file COPYING. If not, see
  **/
 int
 ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
-  return ftp_cmd_unknown(env, arg);
+  return ftp_cmd_unavailable(env, arg);
 }
 
 
