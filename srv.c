@@ -211,7 +211,7 @@ ftp_thread(void *args) {
 
   env.type        = 'A';
   env.data_offset = 0;
-  env.self2elf    = 0;
+  env.self2elf    = 1;
 
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));
