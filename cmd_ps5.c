@@ -64,6 +64,16 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
 }
 
 
+/**
+ * Retreive an ELF file embedded within a SELF file.
+ **/
+int
+ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
+  // SELF decryption is currently not supported, allways send the entire SELF file.
+  return ftp_cmd_RETR(env, arg);
+}
+
+
 /*
   Local Variables:
   c-file-style: "gnu"

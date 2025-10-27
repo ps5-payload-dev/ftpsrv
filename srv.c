@@ -69,6 +69,7 @@ static ftp_command_t commands[] = {
   // custom commands
   {"KILL", ftp_cmd_KILL},
   {"MTRW", ftp_cmd_MTRW},
+  {"SELF", ftp_cmd_SELF},
   {"CHMOD", ftp_cmd_CHMOD},
 
   // duplicates that ensure commands are 4 bytes long
@@ -158,6 +159,9 @@ ftp_execute(ftp_env_t *env, char *line) {
   }
 
   for(int i=0; i<nb_ftp_commands; i++) {
+    if(env->self2elf && !strcmp("RETR", line)) {
+      return ftp_cmd_RETR_SELF2ELF(env, arg);
+    }
     if(strcmp(line, commands[i].name)) {
       continue;
     }
@@ -207,6 +211,7 @@ ftp_thread(void *args) {
 
   env.type        = 'A';
   env.data_offset = 0;
+  env.self2elf    = 1;
 
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));

@@ -17,7 +17,6 @@ along with this program; see the file COPYING. If not, see
 #pragma once
 
 #include <limits.h>
-#include <stdatomic.h>
 #include <netinet/in.h>
 #include <unistd.h>
 
@@ -32,6 +31,7 @@ typedef struct ftp_env {
   char cwd[PATH_MAX];
 
   char type;
+  int self2elf;
   off_t data_offset;
   char rename_path[PATH_MAX];
   struct sockaddr_in data_addr;
@@ -76,6 +76,9 @@ int ftp_cmd_USER(ftp_env_t *env, const char* arg);
 int ftp_cmd_KILL(ftp_env_t *env, const char* arg);
 int ftp_cmd_MTRW(ftp_env_t *env, const char* arg);
 int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
+int ftp_cmd_SELF(ftp_env_t *env, const char* arg);
+int ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg);
+
 
 /**
  * Error responses to unknown/unavailable FTP commands.

@@ -16,6 +16,7 @@ along with this program; see the file COPYING. If not, see
 
 #pragma once
 
+#include <errno.h>
 #include <stdio.h>
 
 #if defined(__PROSPERO__)

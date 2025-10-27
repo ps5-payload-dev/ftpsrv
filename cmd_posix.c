@@ -22,7 +22,17 @@ along with this program; see the file COPYING. If not, see
  **/
 int
 ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
-  return ftp_cmd_unknown(env, arg);
+  return ftp_cmd_unavailable(env, arg);
+}
+
+
+/**
+ * Retreive an ELF file embedded within a SELF file.
+ **/
+int
+ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
+  // SELF decryption is not supported, send the entire SELF file instead.
+  return ftp_cmd_RETR(env, arg);
 }
 
 
