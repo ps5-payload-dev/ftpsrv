@@ -474,25 +474,10 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
 
 
 /**
- * Toggle self2elf transfer mode.
- **/
-int
-ftp_cmd_2ELF(ftp_env_t *env, const char* arg) {
-  env->self2elf = !env->self2elf;
-
-  if(env->self2elf) {
-    return ftp_active_printf(env, "226 SELF2ELF transfer mode enabled\r\n");
-  } else {
-    return ftp_active_printf(env, "226 SELF2ELF transfer mode disabled\r\n");
-  }
-}
-
-
-/**
  * Retreive an ELF file embedded within a SELF file.
  **/
 int
-ftp_cmd_RETR_self2elf(ftp_env_t *env, const char* arg) {
+ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
   char self[PATH_MAX];
   char elf[PATH_MAX];
   int err;

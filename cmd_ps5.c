@@ -65,20 +65,11 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
 
 
 /**
- * Toggle self2elf transfer mode.
- **/
-int
-ftp_cmd_2ELF(ftp_env_t *env, const char* arg) {
-  return ftp_cmd_unavailable(env, arg);
-}
-
-
-/**
  * Retreive an ELF file embedded within a SELF file.
  **/
 int
-ftp_cmd_RETR_self2elf(ftp_env_t *env, const char* arg) {
-  // SELF decryption is currently not supported, send the entire SELF file instead.
+ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
+  // SELF decryption is currently not supported, allways send the entire SELF file.
   return ftp_cmd_RETR(env, arg);
 }
 

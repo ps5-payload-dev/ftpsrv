@@ -759,6 +759,22 @@ ftp_cmd_KILL(ftp_env_t *env, const char* arg) {
 }
 
 
+
+/**
+ * Custom command to toggle SELF2ELF transfer mode.
+ **/
+int
+ftp_cmd_SELF(ftp_env_t *env, const char* arg) {
+  env->self2elf = !env->self2elf;
+
+  if(env->self2elf) {
+    return ftp_active_printf(env, "226 SELF2ELF transfer mode enabled\r\n");
+  } else {
+    return ftp_active_printf(env, "226 SELF2ELF transfer mode disabled\r\n");
+  }
+}
+
+
 /**
  * Unsupported command.
  **/
