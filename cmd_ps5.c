@@ -14,6 +14,11 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
+#include <elf.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <sys/_iovec.h>
@@ -21,6 +26,8 @@ along with this program; see the file COPYING. If not, see
 #include <sys/syscall.h>
 
 #include "cmd.h"
+#include "io.h"
+#include "self.h"
 
 
 #define IOVEC_ENTRY(x) {x ? x : 0, \
@@ -65,12 +72,112 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
 
 
 /**
+ * TODO: SELF decryption on prospero, just copy the SELF file for now.
+ **/
+static int
+self2elf(const char* self_path, const char* elf_path) {
+  self_head_t head;
+  int self_fd;
+  int elf_fd;
+  int ret;
+
+  // Open the SELF file for reading
+  if((self_fd=open(self_path, O_RDONLY, 0)) < 0) {
+    return -1;
+  }
+
+  // Read the SELF header
+  if(io_nread(self_fd, &head, sizeof(head))) {
+    close(self_fd);
+    return -1;
+  }
+
+  // Rewind self_fd
+  if(lseek(self_fd, 0, SEEK_SET)) {
+    close(self_fd);
+    return -1;
+  }
+
+  // Open the ELF file for writing
+  if((elf_fd=open(elf_path, O_RDWR | O_CREAT | O_TRUNC, 0755, 0)) < 0) {
+    close(self_fd);
+    return -1;
+  }
+
+  ret = io_ncopy(self_fd, elf_fd, head.file_size);
+
+  close(self_fd);
+  close(elf_fd);
+
+  return ret;
+}
+
+
+/**
+ * Check if a file is a PS4 or PS5 SELF file.
+ **/
+static int
+is_self(const char* path) {
+  self_head_t head;
+  Elf64_Ehdr ehdr;
+  int r = 0;
+  int fd;
+
+  if((fd=open(path, O_RDONLY, 0)) < 0) {
+    r = 0;
+
+  } else if(io_nread(fd, &head, sizeof(head))) {
+    r = 0;
+
+  } else if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
+    r = 0;
+
+  } else if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
+    r = 0;
+
+  } else if(io_nread(fd, &ehdr, sizeof(ehdr))) {
+    r = 0;
+
+  } else if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
+	    ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
+    r = 0;
+
+  } else {
+    r = 1;
+  }
+
+  close(fd);
+
+  return r;
+}
+
+
+/**
  * Retreive an ELF file embedded within a SELF file.
  **/
 int
 ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
-  // SELF decryption is currently not supported, always send the entire SELF file.
-  return ftp_cmd_RETR(env, arg);
+  char self[PATH_MAX];
+  char elf[PATH_MAX];
+  int err;
+
+  ftp_abspath(env, self, arg);
+  if(!is_self(self)) {
+    return ftp_cmd_RETR(env, arg);
+  }
+
+  snprintf(elf, sizeof(elf), "/user/temp/tmpftpsrv-%d-%d", getpid(),
+	   env->active_fd);
+  if(self2elf(self, elf)) {
+    err = ftp_perror(env);
+    unlink(elf);
+    return err;
+  }
+
+  err = ftp_cmd_RETR(env, elf);
+  unlink(elf);
+
+  return err;
 }
 
 

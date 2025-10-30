@@ -28,6 +28,7 @@ along with this program; see the file COPYING. If not, see
 
 #include "cmd.h"
 #include "io.h"
+#include "self.h"
 
 
 /**
@@ -42,49 +43,6 @@ along with this program; see the file COPYING. If not, see
  **/
 #define MAP_SELF 0x80000
 
-
-/**
- * Data structure for PS4 SELF header.
- **/
-typedef struct self_head {
-  uint8_t magic[4];
-  uint8_t version;
-  uint8_t mode;
-  uint8_t endian;
-  uint8_t attrs;
-  uint32_t key_type;
-  uint16_t header_size;
-  uint16_t meta_size;
-  uint64_t file_size;
-  uint16_t num_entries;
-  uint16_t flags;
-} self_head_t;
-
-
-/**
- * Data structure present in SELF files that encodes additional information
- * about segments in the embedded ELF file.
- **/
-typedef struct self_entry {
-  struct __attribute__((packed)) {
-    uint8_t is_ordered: 1;
-    uint8_t is_encrypted: 1;
-    uint8_t is_signed: 1;
-    uint8_t is_compressed: 1;
-    uint8_t unknown0 : 4;
-    uint8_t window_bits : 3;
-    uint8_t has_blocks : 1;
-    uint8_t block_bits : 4;
-    uint8_t has_digest : 1;
-    uint8_t has_extents : 1;
-    uint8_t unknown1 : 2;
-    uint16_t segment_index : 16;
-    uint32_t unknown2 : 28;
-  } props;
-  uint64_t offset;
-  uint64_t enc_size;
-  uint64_t dec_size;
-} self_entry_t;
 
 
 /**
@@ -194,8 +152,7 @@ self2elf(const char* self_path, const char* elf_path) {
   }
 
   // Sanity check the SELF header
-  if(head.magic[0] != 0x4f || head.magic[1] != 0x15 ||
-     head.magic[2] != 0x3d || head.magic[3] != 0x1d) {
+  if(head.magic != SELF_PS4_MAGIC) {
     close(self_fd);
     errno = ENOEXEC;
     return -1;
@@ -328,7 +285,7 @@ self2elf(const char* self_path, const char* elf_path) {
 
 
 /**
- * Check if a file is a SELF file.
+ * Check if a file is a PS4 SELF file.
  **/
 static int
 is_self(const char* path) {
@@ -343,8 +300,7 @@ is_self(const char* path) {
   } else if(io_nread(fd, &head, sizeof(head))) {
     r = 0;
 
-  } else if(head.magic[0] != 0x4f || head.magic[1] != 0x15 ||
-	    head.magic[2] != 0x3d || head.magic[3] != 0x1d) {
+  } else if(head.magic != SELF_PS4_MAGIC) {
     r = 0;
 
   } else if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
@@ -418,7 +374,8 @@ ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
     return ftp_cmd_RETR(env, arg);
   }
 
-  snprintf(elf, sizeof(elf), "/user/temp/ftpsrv.self2elf%d", env->active_fd);
+  snprintf(elf, sizeof(elf), "/user/temp/tmpftpsrv-%d-%d", getpid(),
+	   env->active_fd);
   if(self2elf(self, elf)) {
     err = ftp_perror(env);
     unlink(elf);
