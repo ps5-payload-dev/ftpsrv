@@ -485,11 +485,10 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
+  off_t off = env->data_offset;
   char pathbuf[PATH_MAX];
-  uint8_t buf[0x4000];
   struct stat st;
   int err = 0;
-  int len;
   int fd;
 
   if(!arg[0]) {
@@ -504,8 +503,16 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   if(S_ISDIR(st.st_mode)) {
     return ftp_active_printf(env, "550 Not a file\r\n");
   }
+  if(off >= st.st_size) {
+    off = st.st_size;
+  }
 
   if((fd=open(pathbuf, O_RDONLY, 0)) < 0) {
+    return ftp_active_printf(env, "550 %s\r\n", strerror(errno));
+  }
+
+  if(lseek(fd, off, SEEK_SET) < 0) {
+    close(fd);
     return ftp_active_printf(env, "550 %s\r\n", strerror(errno));
   }
 
@@ -520,13 +527,11 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
     return err;
   }
 
-  while((len=read(fd, buf, sizeof(buf))) != 0) {
-    if(len < 0 || len != write(env->data_fd, buf, len)) {
+  if(io_ncopy(fd, env->data_fd, st.st_size - off)) {
       err = ftp_perror(env);
       ftp_data_close(env);
       close(fd);
       return err;
-    }
   }
 
   close(fd);
