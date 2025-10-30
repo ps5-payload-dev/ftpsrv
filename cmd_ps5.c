@@ -69,7 +69,7 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
-  // SELF decryption is currently not supported, allways send the entire SELF file.
+  // SELF decryption is currently not supported, always send the entire SELF file.
   return ftp_cmd_RETR(env, arg);
 }
 

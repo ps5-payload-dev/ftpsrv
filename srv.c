@@ -27,6 +27,7 @@ along with this program; see the file COPYING. If not, see
 #include <string.h>
 
 #include "cmd.h"
+#include "io.h"
 #include "log.h"
 #include "notify.h"
 
@@ -187,7 +188,7 @@ ftp_greet(ftp_env_t *env) {
   strncat(msg, "220 Service is ready\r\n", sizeof(msg)-1);
 
   len = strlen(msg);
-  if(write(env->active_fd, msg, len) != len) {
+  if(io_nwrite(env->active_fd, msg, len)) {
     return -1;
   }
 

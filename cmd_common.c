@@ -31,6 +31,7 @@ along with this program; see the file COPYING. If not, see
 #include <unistd.h>
 
 #include "cmd.h"
+#include "io.h"
 #include "log.h"
 
 
@@ -138,7 +139,7 @@ ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
 
   len = strlen(buf);
 
-  if(write(env->active_fd, buf, len) != len) {
+  if(io_nwrite(env->active_fd, buf, len)) {
     return -1;
   }
 
@@ -529,7 +530,6 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   }
 
   close(fd);
-
   if(ftp_data_close(env)) {
     return ftp_perror(env);
   }

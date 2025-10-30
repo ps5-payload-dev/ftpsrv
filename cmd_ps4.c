@@ -23,11 +23,11 @@ along with this program; see the file COPYING. If not, see
 
 #include <sys/_iovec.h>
 #include <sys/mount.h>
-#include <sys/syscall.h>
 #include <sys/mman.h>
 #include <sys/errno.h>
 
 #include "cmd.h"
+#include "io.h"
 
 
 /**
@@ -88,75 +88,6 @@ typedef struct self_entry {
 
 
 /**
- * Read exactly N bytes from the given file descriptor.
- **/
-static int
-nread(int fd, void* buf, size_t n) {
-  int r;
-
-  if((r=read(fd, buf, n)) < 0) {
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
-  }
-
-  return 0;
-}
-
-
-/**
- * Write exactly N bytes to the given file descriptor.
- **/
-static int
-nwrite(int fd, const void* buf, size_t n) {
-  int r;
-
-  if((r=write(fd, buf, n)) < 0) {
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
-  }
-
-  return 0;
-}
-
-
-/**
- * Copy exactly N bytes from one file descriptor to another.
- **/
-static int
-ncopy(int fd_in, int fd_out, size_t size) {
-  size_t copied = 0;
-  char buf[0x1000];
-  ssize_t n;
-
-  while(copied < size) {
-    n = size - copied;
-    if(n > sizeof(buf)) {
-      n = sizeof(buf);
-    }
-
-    if(nread(fd_in, buf, n)) {
-      return -1;
-    }
-    if(nwrite(fd_out, buf, n)) {
-      return -1;
-    }
-
-    copied += n;
-  }
-
-  return 0;
-}
-
-
-/**
  * Decrypt and copy an ELF segment.
  **/
 static int
@@ -181,7 +112,7 @@ decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
   // ensure kernel is mapping the segments
   memcpy(&tmp, data, 1);
 
-  if(nwrite(elf_fd, data, phdr->p_filesz)) {
+  if(io_nwrite(elf_fd, data, phdr->p_filesz)) {
     munmap(data, phdr->p_filesz);
     return -1;
   }
@@ -222,7 +153,7 @@ copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
     return -1;
   }
 
-  if(ncopy(from_fd, to_fd, size)) {
+  if(io_ncopy(from_fd, to_fd, size)) {
     return -1;
   }
 
@@ -257,7 +188,7 @@ self2elf(const char* self_path, const char* elf_path) {
   }
 
   // Read the SELF header
-  if(nread(self_fd, &head, sizeof(head))) {
+  if(io_nread(self_fd, &head, sizeof(head))) {
     close(self_fd);
     return -1;
   }
@@ -275,7 +206,7 @@ self2elf(const char* self_path, const char* elf_path) {
     close(self_fd);
     return -1;
   }
-  if(nread(self_fd, entries, head.num_entries * sizeof(self_entry_t))) {
+  if(io_nread(self_fd, entries, head.num_entries * sizeof(self_entry_t))) {
     close(self_fd);
     free(entries);
     return -1;
@@ -283,7 +214,7 @@ self2elf(const char* self_path, const char* elf_path) {
 
   // Read the ELF header bundled within the SELF file
   elf_off = lseek(self_fd, 0, SEEK_CUR);
-  if(nread(self_fd, &ehdr, sizeof(ehdr))) {
+  if(io_nread(self_fd, &ehdr, sizeof(ehdr))) {
     close(self_fd);
     free(entries);
     return -1;
@@ -320,7 +251,7 @@ self2elf(const char* self_path, const char* elf_path) {
   }
 
   // Write the ELF header
-  if(nwrite(elf_fd, &ehdr, sizeof(ehdr))) {
+  if(io_nwrite(elf_fd, &ehdr, sizeof(ehdr))) {
     close(self_fd);
     close(elf_fd);
     free(entries);
@@ -329,13 +260,13 @@ self2elf(const char* self_path, const char* elf_path) {
 
   // Enumerate ELF program headers
   for(int i=0; i<ehdr.e_phnum; i++) {
-    if(nread(self_fd, &phdr, sizeof(phdr))) {
+    if(io_nread(self_fd, &phdr, sizeof(phdr))) {
       close(self_fd);
       close(elf_fd);
       free(entries);
       return -1;
     }
-    if(nwrite(elf_fd, &phdr, sizeof(phdr))) {
+    if(io_nwrite(elf_fd, &phdr, sizeof(phdr))) {
       close(self_fd);
       close(elf_fd);
       free(entries);
@@ -409,7 +340,7 @@ is_self(const char* path) {
   if((fd=open(path, O_RDONLY, 0)) < 0) {
     r = 0;
 
-  } else if(nread(fd, &head, sizeof(head))) {
+  } else if(io_nread(fd, &head, sizeof(head))) {
     r = 0;
 
   } else if(head.magic[0] != 0x4f || head.magic[1] != 0x15 ||
@@ -419,7 +350,7 @@ is_self(const char* path) {
   } else if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
     r = 0;
 
-  } else if(nread(fd, &ehdr, sizeof(ehdr))) {
+  } else if(io_nread(fd, &ehdr, sizeof(ehdr))) {
     r = 0;
 
   } else if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
@@ -461,11 +392,11 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
     IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
   };
 
-  if(syscall(SYS_nmount, iov_sys, IOVEC_SIZE(iov_sys), MNT_UPDATE)) {
+  if(nmount(iov_sys, IOVEC_SIZE(iov_sys), MNT_UPDATE)) {
     return ftp_perror(env);
   }
 
-  if(syscall(SYS_nmount, iov_sysex, IOVEC_SIZE(iov_sysex), MNT_UPDATE)) {
+  if(nmount(iov_sysex, IOVEC_SIZE(iov_sysex), MNT_UPDATE)) {
     return ftp_perror(env);
   }
 
