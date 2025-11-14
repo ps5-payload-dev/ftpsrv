@@ -528,10 +528,10 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   }
 
   if(io_ncopy(fd, env->data_fd, st.st_size - off)) {
-      err = ftp_perror(env);
-      ftp_data_close(env);
-      close(fd);
-      return err;
+    err = ftp_perror(env);
+    ftp_data_close(env);
+    close(fd);
+    return err;
   }
 
   close(fd);
