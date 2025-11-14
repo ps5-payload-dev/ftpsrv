@@ -16,18 +16,19 @@ along with this program; see the file COPYING. If not, see
 
 #pragma once
 
+#include <elf.h>
 #include <stdint.h>
 
 
 /**
- * Magic integer (little endian) that all SELF files starts with.
+ * Magic integer (little endian) that all PS4 or PS5 SELF files starts with.
  **/
 #define SELF_PS4_MAGIC 0x1D3D154F
 #define SELF_PS5_MAGIC 0xEEF51454
 
 
 /**
- * Data structure for SELF file headers.
+ * Data structure for PS4 and PS5 SELF file headers.
  **/
 typedef struct self_head {
   uint32_t magic;
@@ -45,8 +46,8 @@ typedef struct self_head {
 
 
 /**
- * Data structure present in SELF files that encodes additional information
- * about segments in the embedded ELF file.
+ * Data structure present in PS4 and PS5 SELF files that encodes additional
+ * information about segments in the embedded ELF file.
  **/
 typedef struct self_entry {
   struct __attribute__((packed)) {
@@ -69,3 +70,20 @@ typedef struct self_entry {
   uint64_t dec_size;
 } self_entry_t;
 
+
+/**
+ *
+ **/
+void* self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind);
+
+
+/**
+ * Check if the given path is a SELF file.
+ **/
+int self_is_valid(const char* path);
+
+
+/**
+ * Extract the ELF file embedded within the given SELF file.
+ **/
+int self_extract_elf(const char* self_path, const char* elf_path);

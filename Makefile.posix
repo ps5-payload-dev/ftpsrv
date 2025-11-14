@@ -17,11 +17,11 @@
 ELF := ftpsrv-posix.elf
 
 VERSION_TAG := $(shell git describe --abbrev=6 --dirty --always --tags)
-CFLAGS := -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\"
+CFLAGS := -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\" -I.
 
 all: $(ELF)
 
-$(ELF): main_posix.c io.c srv.c cmd_common.c cmd_posix.c notify.c
+$(ELF): srv.c cmd.c notify.c io.c self.c posix/main.c posix/cmd.c posix/self.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

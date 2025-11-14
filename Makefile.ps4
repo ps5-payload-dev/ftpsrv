@@ -26,15 +26,15 @@ endif
 ELF := ftpsrv-ps4.elf
 
 VERSION_TAG := $(shell git describe --abbrev=6 --dirty --always --tags)
-CFLAGS := -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\"
+CFLAGS := -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\" -I.
 
 all: $(ELF)
 
-$(ELF): main_ps4.c io.c srv.c cmd_common.c cmd_ps4.c notify.c
+$(ELF): srv.c cmd.c notify.c io.c self.c orbis/main.c orbis/cmd.c orbis/self.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	rm -f $(ELF)
+	rm -f *.elf
 
 test: $(ELF)
 	$(PS4_DEPLOY) -h $(PS4_HOST) -p $(PS4_PORT) $^

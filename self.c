@@ -15,34 +15,15 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include <elf.h>
+#include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <unistd.h>
 
-#include <sys/_iovec.h>
-#include <sys/mount.h>
 #include <sys/mman.h>
-#include <sys/errno.h>
 
-#include "cmd.h"
 #include "io.h"
 #include "self.h"
-
-
-/**
- * Convenient macros for nmount.
- **/
-#define IOVEC_SIZE(x) (sizeof(x) / sizeof(struct iovec))
-#define IOVEC_ENTRY(x) {x ? x : 0, x ? strlen(x)+1 : 0}
-
-
-/**
- * Flag for mmap used to decrypted PS4 SELF files.
- **/
-#define MAP_SELF 0x80000
-
 
 
 /**
@@ -53,7 +34,6 @@ decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
   off_t self_pos = lseek(self_fd, 0, SEEK_CUR);
   off_t elf_pos = lseek(elf_fd, 0, SEEK_CUR);
   uint8_t* data;
-  char tmp;
 
   if(lseek(self_fd, 0, SEEK_SET) < 0) {
     return -1;
@@ -62,13 +42,14 @@ decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
     return -1;
   }
 
-  if((data=mmap(0, phdr->p_filesz, PROT_READ, MAP_PRIVATE | MAP_SELF,
-		self_fd, ind << 32)) == MAP_FAILED) {
+  if((data=self_map_segment(self_fd, phdr, ind)) == MAP_FAILED) {
     return -1;
   }
 
-  // ensure kernel is mapping the segments
-  memcpy(&tmp, data, 1);
+  if(mlock(data, phdr->p_filesz)) {
+    munmap(data, phdr->p_filesz);
+    return -1;
+  }
 
   if(io_nwrite(elf_fd, data, phdr->p_filesz)) {
     munmap(data, phdr->p_filesz);
@@ -89,7 +70,7 @@ decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
 
 
 /**
- * Copy an ELF segment.
+ * Copy a plaintext ELF segment.
  **/
 static int
 copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
@@ -126,11 +107,8 @@ copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
 }
 
 
-/**
- * Extract the ELF file embedded within ther given SELF file.
- **/
-static int
-self2elf(const char* self_path, const char* elf_path) {
+int
+self_extract_elf(const char* self_path, const char* elf_path) {
   self_entry_t* entries;
   self_entry_t* entry;
   self_head_t head;
@@ -152,7 +130,7 @@ self2elf(const char* self_path, const char* elf_path) {
   }
 
   // Sanity check the SELF header
-  if(head.magic != SELF_PS4_MAGIC) {
+  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
     close(self_fd);
     errno = ENOEXEC;
     return -1;
@@ -187,10 +165,10 @@ self2elf(const char* self_path, const char* elf_path) {
   }
 
   // Drop section headers
+#if 0
   ehdr.e_shnum = 0;
   ehdr.e_shoff = 0;
-  ehdr.e_shentsize = 0;
-  ehdr.e_shstrndx = 0;
+#endif
 
   // Skip ahead to the ELF program headers
   if(lseek(self_fd, elf_off + ehdr.e_phoff, SEEK_SET) < 0) {
@@ -201,7 +179,6 @@ self2elf(const char* self_path, const char* elf_path) {
 
   // Open the ELF file for writing
   if((elf_fd=open(elf_path, O_RDWR | O_CREAT | O_TRUNC, 0755, 0)) < 0) {
-    perror(elf_path);
     close(self_fd);
     free(entries);
     return -1;
@@ -233,6 +210,7 @@ self2elf(const char* self_path, const char* elf_path) {
     if(!phdr.p_filesz) {
       continue;
     }
+
     if(phdr.p_type == 0x6FFFFF01) { // PT_SCE_VERSION
       // Version segment is appended at the end of the SELF file in plaintext
       if(copy_segment(self_fd, head.file_size, elf_fd, phdr.p_offset,
@@ -258,21 +236,20 @@ self2elf(const char* self_path, const char* elf_path) {
       continue;
     }
 
-    if(entry->props.is_encrypted) {
+    // Decrypt and/or copy the segment
+    if(entry->props.is_encrypted || entry->props.is_compressed) {
       if(decrypt_segment(self_fd, elf_fd, &phdr, i)) {
 	close(self_fd);
 	close(elf_fd);
 	free(entries);
 	return -1;
       }
-    } else {
-      if(copy_segment(self_fd, entry->offset, elf_fd, phdr.p_offset,
-		      phdr.p_filesz)) {
-	close(self_fd);
-	close(elf_fd);
-	free(entries);
-	return -1;
-      }
+    } else if(copy_segment(self_fd, entry->offset, elf_fd, phdr.p_offset,
+			   phdr.p_filesz)) {
+      close(self_fd);
+      close(elf_fd);
+      free(entries);
+      return -1;
     }
   }
 
@@ -284,108 +261,33 @@ self2elf(const char* self_path, const char* elf_path) {
 }
 
 
-/**
- * Check if a file is a PS4 SELF file.
- **/
-static int
-is_self(const char* path) {
+int
+self_is_valid(const char* path) {
   self_head_t head;
-  Elf64_Ehdr ehdr;
-  int r = 0;
+  ssize_t n;
   int fd;
 
   if((fd=open(path, O_RDONLY, 0)) < 0) {
-    r = 0;
+    return -1;
+  }
 
-  } else if(io_nread(fd, &head, sizeof(head))) {
-    r = 0;
+  if((n=read(fd, &head, sizeof(head))) < 0) {
+    close(fd);
+    return -1;
+  }
 
-  } else if(head.magic != SELF_PS4_MAGIC) {
-    r = 0;
+  if(n != sizeof(head)) {
+    close(fd);
+    return 0;
+  }
 
-  } else if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
-    r = 0;
-
-  } else if(io_nread(fd, &ehdr, sizeof(ehdr))) {
-    r = 0;
-
-  } else if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
-	    ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
-    r = 0;
-
-  } else {
-    r = 1;
+  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
+    close(fd);
+    return 0;
   }
 
   close(fd);
-
-  return r;
-}
-
-
-/**
- * Remount read-only mount points with write permissions.
- **/
-int
-ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
-  struct iovec iov_sys[] = {
-    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/da0x4.crypt"),
-    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system"),
-    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
-    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
-    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
-    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
-    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
-  };
-
-  struct iovec iov_sysex[] = {
-    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/da0x5.crypt"),
-    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system_ex"),
-    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
-    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
-    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
-    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
-    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
-  };
-
-  if(nmount(iov_sys, IOVEC_SIZE(iov_sys), MNT_UPDATE)) {
-    return ftp_perror(env);
-  }
-
-  if(nmount(iov_sysex, IOVEC_SIZE(iov_sysex), MNT_UPDATE)) {
-    return ftp_perror(env);
-  }
-
-  return ftp_active_printf(env, "226 /system and /system_ex remounted\r\n");
-}
-
-
-/**
- * Retreive an ELF file embedded within a SELF file.
- **/
-int
-ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
-  char self[PATH_MAX];
-  char elf[PATH_MAX];
-  int err;
-
-  ftp_abspath(env, self, arg);
-  if(!is_self(self)) {
-    return ftp_cmd_RETR(env, arg);
-  }
-
-  snprintf(elf, sizeof(elf), "/user/temp/tmpftpsrv-%d-%d", getpid(),
-	   env->active_fd);
-  if(self2elf(self, elf)) {
-    err = ftp_perror(env);
-    unlink(elf);
-    return err;
-  }
-
-  err = ftp_cmd_RETR(env, elf);
-  unlink(elf);
-
-  return err;
+  return 1;
 }
 
 
