@@ -92,7 +92,7 @@ self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind) {
 
 
 /**
- * Resolve the kernel ponters that we need.
+ * Resolve kernel ponters that we need.
  **/
 static void __attribute__((constructor))
 self_prospero_constructor(void) {
@@ -195,3 +195,10 @@ self_prospero_constructor(void) {
   KERNEL_ADDRESS_PAGER_OPS_VNODE = kernel_getlong(KERNEL_ADDRESS_PAGER_TABLE + 2 * 8);
   KERNEL_ADDRESS_PAGER_OPS_SELF = kernel_getlong(KERNEL_ADDRESS_PAGER_TABLE + 7 * 8);
 }
+
+
+/*
+  Local Variables:
+  c-file-style: "gnu"
+  End:
+*/

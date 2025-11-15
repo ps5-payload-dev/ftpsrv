@@ -4,18 +4,14 @@ Playstation 5 that has been jailbroken and is running an ELF loader.
 The FTP server accepts connection on port 2121.
 
 ## Features
-Client software that has been testing include gFTP, Filezilla, curl, and Thunar.
+Client software that has been tested include gFTP, Filezilla, curl, and Thunar.
 The payload supports a couple of custom SITE commands specifically for the
 PS4 and PS5 (executed without prepending SITE). In particular:
  - KILL - kill the FTP server.
  - MTRW - remount /system and /system_ex with write permissions.
+ - SELF - toggle on-the-fly SELF to ELF decryption (enabled by default).
 
-When ftpsrv.elf is running on a PS4, segments contained within SELF files
-(i.e., ELF files with potentially encrypted segments), some encrypted data is
-decrypted on the fly. To disable this behaviour and transer the encrypted SELF
-file in its original form, issue the SITE command SELF (without the SITE prefix)
-before starting the transfer. Note: the SELF command operates on induvidual
-connections.
+Note: the SELF command operates on induvidual connections.
 
 ## Building for the PS4
 Assuming you have the [ps4-payload-sdk][sdk-ps4] installed on a POSIX machine,
