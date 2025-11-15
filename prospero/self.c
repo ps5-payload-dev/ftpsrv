@@ -56,14 +56,18 @@ mmap_self(void *addr, size_t len, int prot, int flags, int fd, off_t offset) {
   }
 
   // make vnode pagerops point to selfpagerops
-  kernel_setlong(KERNEL_ADDRESS_PAGER_TABLE + 2*8,
-		 KERNEL_ADDRESS_PAGER_OPS_SELF);
+  if(kernel_setlong(KERNEL_ADDRESS_PAGER_TABLE + 2*8,
+		    KERNEL_ADDRESS_PAGER_OPS_SELF)) {
+    return MAP_FAILED;
+  }
 
   data = mmap(addr, len, prot, flags, fd, offset);
 
   // restore vnode pagerops
-  kernel_setlong(KERNEL_ADDRESS_PAGER_TABLE + 2*8,
-		 KERNEL_ADDRESS_PAGER_OPS_VNODE);
+  if(kernel_setlong(KERNEL_ADDRESS_PAGER_TABLE + 2*8,
+		    KERNEL_ADDRESS_PAGER_OPS_VNODE)) {
+    return MAP_FAILED;
+  }
 
   return data;
 }
