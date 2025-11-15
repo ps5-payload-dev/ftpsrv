@@ -126,7 +126,6 @@ ftp_data_close(ftp_env_t *env) {
 }
 
 
-
 int
 ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
   char buf[0x1000];
@@ -331,9 +330,9 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
+  const char *p = env->cwd;
   char pathbuf[PATH_MAX*3];
   struct dirent *ent;
-  const char *p = env->cwd;
   struct stat statbuf;
   char timebuf[20];
   char modebuf[20];
@@ -759,7 +758,7 @@ ftp_cmd_USER(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_KILL(ftp_env_t *env, const char* arg) {
   FTP_LOG_PUTS("Server killed");
-  _exit(EXIT_SUCCESS);
+  exit(EXIT_SUCCESS);
   return -1;
 }
 
