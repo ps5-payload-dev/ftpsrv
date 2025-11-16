@@ -33,6 +33,7 @@ along with this program; see the file COPYING. If not, see
 #include "cmd.h"
 #include "io.h"
 #include "log.h"
+#include "self.h"
 
 
 /**
@@ -613,15 +614,18 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
-  struct stat st;
+  struct stat st = {0};
 
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: SIZE <FILENAME>\r\n");
   }
 
   ftp_abspath(env, pathbuf, arg);
-  if(stat(pathbuf, &st)) {
-    return ftp_perror(env);
+
+  if(env->self2elf && !self_is_valid(pathbuf)) {
+    if(stat(pathbuf, &st)) {
+      return ftp_perror(env);
+    }
   }
 
   return ftp_active_printf(env, "213 %"  PRIu64 "\r\n", st.st_size);
