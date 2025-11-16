@@ -81,7 +81,7 @@ ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
   int err;
 
   ftp_abspath(env, self, arg);
-  if(self_is_valid(self) != 1) {
+  if(!env->self2elf || self_is_valid(self) != 1) {
     return ftp_cmd_RETR(env, arg);
   }
 
