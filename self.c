@@ -211,18 +211,6 @@ self_extract_elf(const char* self_path, const char* elf_path) {
       continue;
     }
 
-    if(phdr.p_type == 0x6FFFFF01) { // PT_SCE_VERSION
-      // Version segment is appended at the end of the SELF file in plaintext
-      if(copy_segment(self_fd, head.file_size, elf_fd, phdr.p_offset,
-		      phdr.p_filesz)) {
-	close(self_fd);
-	close(elf_fd);
-	free(entries);
-	return -1;
-      }
-      continue;
-    }
-
     // Find the SELF entry for this program header
     entry = 0;
     for(int j=0; j<head.num_entries; j++) {
