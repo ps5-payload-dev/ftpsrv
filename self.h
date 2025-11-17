@@ -87,3 +87,9 @@ int self_is_valid(const char* path);
  * Extract the ELF file embedded within the given SELF file.
  **/
 int self_extract_elf(const char* self_path, const char* elf_path);
+
+
+/**
+ * Compute the size of the ELF file embedded within the given SELF file.
+ **/
+size_t self_get_elfsize(const char* path);

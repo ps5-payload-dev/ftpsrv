@@ -622,7 +622,11 @@ ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
 
   ftp_abspath(env, pathbuf, arg);
 
-  if(env->self2elf && !self_is_valid(pathbuf)) {
+  if(env->self2elf) {
+    st.st_size = self_get_elfsize(pathbuf);
+  }
+
+  if(!st.st_size) {
     if(stat(pathbuf, &st)) {
       return ftp_perror(env);
     }

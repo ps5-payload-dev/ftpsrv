@@ -21,9 +21,54 @@ along with this program; see the file COPYING. If not, see
 #include <unistd.h>
 
 #include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "io.h"
 #include "self.h"
+
+
+/**
+ * Fill wholes in a file between off and off+len with zeroes.
+ **/
+static int
+zeropad(int fd, off_t off, off_t len) {
+  char buf[0x4000];
+  struct stat st;
+  size_t n;
+  long cur;
+
+  if((cur=lseek(fd, 0, SEEK_CUR)) < 0) {
+    return -1;
+  }
+
+  if(fstat(fd, &st)) {
+    return -1;
+  }
+
+  if(st.st_size >= off+len) {
+    return 0;
+  }
+
+  if(lseek(fd, 0, SEEK_END) < 0) {
+    return -1;
+  }
+
+  for(off_t i=st.st_size; i<off+len; i+=sizeof(buf)) {
+    n = sizeof(buf);
+    if(i+n > off+len) {
+      n = off+len-i;
+    }
+    if(io_nwrite(fd, buf, n)) {
+      return -1;
+    }
+  }
+
+  if(lseek(fd, cur, SEEK_SET) < 0) {
+    return -1;
+  }
+
+  return 0;
+}
 
 
 /**
@@ -107,50 +152,43 @@ copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
 }
 
 
-int
-self_extract_elf(const char* self_path, const char* elf_path) {
+static int
+self_extract_elf_fd(int self_fd, int elf_fd) {
   self_entry_t* entries;
   self_entry_t* entry;
   self_head_t head;
   Elf64_Ehdr ehdr;
   Elf64_Phdr phdr;
   off_t elf_off;
-  int self_fd;
-  int elf_fd;
-
-  // Open the SELF file for reading
-  if((self_fd=open(self_path, O_RDONLY, 0)) < 0) {
-    return -1;
-  }
 
   // Read the SELF header
   if(io_nread(self_fd, &head, sizeof(head))) {
-    close(self_fd);
     return -1;
   }
 
   // Sanity check the SELF header
   if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
-    close(self_fd);
     errno = ENOEXEC;
     return -1;
   }
 
   // Read SELF entries
   if(!(entries=calloc(head.num_entries, sizeof(self_entry_t)))) {
-    close(self_fd);
     return -1;
   }
   if(io_nread(self_fd, entries, head.num_entries * sizeof(self_entry_t))) {
-    close(self_fd);
     free(entries);
     return -1;
   }
 
-  // Read the ELF header bundled within the SELF file
-  elf_off = lseek(self_fd, 0, SEEK_CUR);
+  // Remember the position of the ELF header bundled within the SELF file
+  if((elf_off=lseek(self_fd, 0, SEEK_CUR)) < 0) {
+    free(entries);
+    return -1;
+  }
+
+  // Read the ELF header
   if(io_nread(self_fd, &ehdr, sizeof(ehdr))) {
-    close(self_fd);
     free(entries);
     return -1;
   }
@@ -158,36 +196,25 @@ self_extract_elf(const char* self_path, const char* elf_path) {
   // Sanity check the ELF header
   if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
      ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
-    close(self_fd);
     free(entries);
     errno = ENOEXEC;
     return -1;
   }
 
-  // Drop section headers
 #if 0
+  // Drop section headers
   ehdr.e_shnum = 0;
   ehdr.e_shoff = 0;
 #endif
 
   // Skip ahead to the ELF program headers
   if(lseek(self_fd, elf_off + ehdr.e_phoff, SEEK_SET) < 0) {
-    close(self_fd);
-    free(entries);
-    return -1;
-  }
-
-  // Open the ELF file for writing
-  if((elf_fd=open(elf_path, O_RDWR | O_CREAT | O_TRUNC, 0755, 0)) < 0) {
-    close(self_fd);
     free(entries);
     return -1;
   }
 
   // Write the ELF header
   if(io_nwrite(elf_fd, &ehdr, sizeof(ehdr))) {
-    close(self_fd);
-    close(elf_fd);
     free(entries);
     return -1;
   }
@@ -195,19 +222,25 @@ self_extract_elf(const char* self_path, const char* elf_path) {
   // Enumerate ELF program headers
   for(int i=0; i<ehdr.e_phnum; i++) {
     if(io_nread(self_fd, &phdr, sizeof(phdr))) {
-      close(self_fd);
-      close(elf_fd);
       free(entries);
       return -1;
     }
     if(io_nwrite(elf_fd, &phdr, sizeof(phdr))) {
-      close(self_fd);
-      close(elf_fd);
       free(entries);
       return -1;
     }
 
     if(!phdr.p_filesz) {
+      continue;
+    }
+
+    // PT_SCE_VERSION segment is appended at the end of the SELF file
+    if(phdr.p_type == 0x6fffff01) {
+      if(copy_segment(self_fd, head.file_size, elf_fd, phdr.p_offset,
+		      phdr.p_filesz)) {
+	free(entries);
+	return -1;
+      }
       continue;
     }
 
@@ -227,25 +260,53 @@ self_extract_elf(const char* self_path, const char* elf_path) {
     // Decrypt and/or copy the segment
     if(entry->props.is_encrypted || entry->props.is_compressed) {
       if(decrypt_segment(self_fd, elf_fd, &phdr, i)) {
-	close(self_fd);
-	close(elf_fd);
 	free(entries);
 	return -1;
       }
     } else if(copy_segment(self_fd, entry->offset, elf_fd, phdr.p_offset,
 			   phdr.p_filesz)) {
-      close(self_fd);
-      close(elf_fd);
       free(entries);
       return -1;
     }
   }
 
+  free(entries);
+  return 0;
+}
+
+
+int
+self_extract_elf(const char* self_path, const char* elf_path) {
+  size_t elf_size = self_get_elfsize(self_path);
+  int self_fd;
+  int elf_fd;
+  int res;
+
+  // Open the ELF file for writing
+  if((elf_fd=open(elf_path, O_RDWR | O_CREAT | O_TRUNC, 0755, 0)) < 0) {
+    return -1;
+  }
+
+  // Fill the ELF file with zeroes. Normally, we could use ftruncate here, but
+  // it seems that files stored on exfat partitions are not zeroed out correctly.
+  if(zeropad(elf_fd, 0, elf_size)) {
+    close(elf_fd);
+    return -1;
+  }
+
+  // Open the SELF file for reading
+  if((self_fd=open(self_path, O_RDONLY, 0)) < 0) {
+    close(elf_fd);
+    return -1;
+  }
+
+  // Extract the ELF file
+  res = self_extract_elf_fd(self_fd, elf_fd);
+
   close(self_fd);
   close(elf_fd);
-  free(entries);
 
-  return 0;
+  return res;
 }
 
 
@@ -276,6 +337,75 @@ self_is_valid(const char* path) {
 
   close(fd);
   return 1;
+}
+
+
+size_t
+self_get_elfsize(const char* path) {
+  self_head_t head;
+  Elf64_Ehdr ehdr;
+  Elf64_Phdr phdr;
+  off_t elf_off;
+  size_t size = 0;
+  int fd;
+
+  if((fd=open(path, O_RDONLY, 0)) < 0) {
+    return 0;
+  }
+
+  if(io_nread(fd, &head, sizeof(head))) {
+    close(fd);
+    return 0;
+  }
+
+  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
+    close(fd);
+    return 0;
+  }
+
+  if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
+    close(fd);
+    return 0;
+  }
+
+  elf_off = lseek(fd, 0, SEEK_CUR);
+  if(io_nread(fd, &ehdr, sizeof(ehdr))) {
+    close(fd);
+    return 0;
+  }
+
+  if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
+     ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
+    close(fd);
+    return 0;
+  }
+
+  if(ehdr.e_shoff > ehdr.e_phoff) {
+    close(fd);
+    return ehdr.e_shoff;
+  }
+
+  if(lseek(fd, elf_off + ehdr.e_phoff, SEEK_SET) < 0) {
+    close(fd);
+    return 0;
+  }
+
+  for(int i=0; i<ehdr.e_phnum; i++) {
+    if(io_nread(fd, &phdr, sizeof(phdr))) {
+      close(fd);
+      return 0;
+    }
+    if(!phdr.p_filesz) {
+      continue;
+    }
+    if(phdr.p_offset + phdr.p_filesz > size) {
+      size = phdr.p_offset + phdr.p_filesz;
+    }
+  }
+
+  close(fd);
+
+  return size;
 }
 
 
