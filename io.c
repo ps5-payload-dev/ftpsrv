@@ -16,6 +16,7 @@ along with this program; see the file COPYING. If not, see
 
 #include <errno.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include <sys/errno.h>
 
@@ -59,25 +60,29 @@ io_nwrite(int fd, const void* buf, size_t n) {
 int
 io_ncopy(int fd_in, int fd_out, size_t size) {
   size_t copied = 0;
-  char buf[0x4000];
+  size_t buf_size = size > DATA_BUFFER_SIZE ? DATA_BUFFER_SIZE : size;
+  char* buf = malloc(buf_size);
   ssize_t n;
 
   while(copied < size) {
     n = size - copied;
-    if(n > sizeof(buf)) {
-      n = sizeof(buf);
+    if(n > buf_size) {
+      n = buf_size;
     }
 
     if(io_nread(fd_in, buf, n)) {
+      free(buf);
       return -1;
     }
     if(io_nwrite(fd_out, buf, n)) {
+      free(buf);
       return -1;
     }
 
     copied += n;
   }
 
+  free(buf);
   return 0;
 }
 

@@ -18,6 +18,10 @@ along with this program; see the file COPYING. If not, see
 
 #include <stddef.h>
 
+/**
+ * data buffer size 1MB
+ */
+#define DATA_BUFFER_SIZE 0x100000
 
 /**
  * Read exactly N bytes from the given file descriptor.
