@@ -17,6 +17,7 @@ along with this program; see the file COPYING. If not, see
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -25,6 +26,45 @@ along with this program; see the file COPYING. If not, see
 
 #include "io.h"
 #include "self.h"
+
+
+/**
+ * Global lock used to address race conditions that may occur when
+ * threads atempt to read several SELF files at the same time.
+ **/
+static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+/**
+ * Open a SELF file and aquire the global lock.
+ **/
+static int
+self_open(const char* path, int flags, mode_t mode) {
+  int fd;
+
+  pthread_mutex_lock(&g_mutex);
+  if((fd=open(path, flags, mode)) < 0) {
+    pthread_mutex_unlock(&g_mutex);
+    return -1;
+  }
+
+  return fd;
+}
+
+
+/**
+ * Close a SELF file and release the global lock.
+ **/
+static int
+self_close(int fd) {
+  int res = close(fd);
+
+  if(fd != -1) {
+    pthread_mutex_unlock(&g_mutex);
+  }
+
+  return res;
+}
 
 
 /**
@@ -295,7 +335,7 @@ self_extract_elf(const char* self_path, const char* elf_path) {
   }
 
   // Open the SELF file for reading
-  if((self_fd=open(self_path, O_RDONLY, 0)) < 0) {
+  if((self_fd=self_open(self_path, O_RDONLY, 0)) < 0) {
     close(elf_fd);
     return -1;
   }
@@ -303,7 +343,7 @@ self_extract_elf(const char* self_path, const char* elf_path) {
   // Extract the ELF file
   res = self_extract_elf_fd(self_fd, elf_fd);
 
-  close(self_fd);
+  self_close(self_fd);
   close(elf_fd);
 
   return res;
@@ -316,26 +356,26 @@ self_is_valid(const char* path) {
   ssize_t n;
   int fd;
 
-  if((fd=open(path, O_RDONLY, 0)) < 0) {
+  if((fd=self_open(path, O_RDONLY, 0)) < 0) {
     return -1;
   }
 
   if((n=read(fd, &head, sizeof(head))) < 0) {
-    close(fd);
+    self_close(fd);
     return -1;
   }
 
   if(n != sizeof(head)) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
-  close(fd);
+  self_close(fd);
   return 1;
 }
 
@@ -349,50 +389,50 @@ self_get_elfsize(const char* path) {
   size_t size = 0;
   int fd;
 
-  if((fd=open(path, O_RDONLY, 0)) < 0) {
+  if((fd=self_open(path, O_RDONLY, 0)) < 0) {
     return 0;
   }
 
   if(io_nread(fd, &head, sizeof(head))) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   elf_off = lseek(fd, 0, SEEK_CUR);
   if(io_nread(fd, &ehdr, sizeof(ehdr))) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
      ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   if(ehdr.e_shoff > ehdr.e_phoff) {
-    close(fd);
+    self_close(fd);
     return ehdr.e_shoff;
   }
 
   if(lseek(fd, elf_off + ehdr.e_phoff, SEEK_SET) < 0) {
-    close(fd);
+    self_close(fd);
     return 0;
   }
 
   for(int i=0; i<ehdr.e_phnum; i++) {
     if(io_nread(fd, &phdr, sizeof(phdr))) {
-      close(fd);
+      self_close(fd);
       return 0;
     }
     if(!phdr.p_filesz) {
@@ -403,7 +443,7 @@ self_get_elfsize(const char* path) {
     }
   }
 
-  close(fd);
+  self_close(fd);
 
   return size;
 }
