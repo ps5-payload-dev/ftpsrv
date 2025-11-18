@@ -18,6 +18,7 @@ along with this program; see the file COPYING. If not, see
 
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 
 #if defined(__PROSPERO__)
 #include <ps5/klog.h>
