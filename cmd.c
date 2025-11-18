@@ -483,63 +483,103 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 /**
  * Retreive data from a given file.
  **/
-int
-ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
+static int
+ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
   off_t off = env->data_offset;
-  char pathbuf[PATH_MAX];
   struct stat st;
   int err = 0;
+
+  if(fstat(fd, &st)) {
+    return ftp_perror(env);
+  }
+  if(lseek(fd, off, SEEK_SET) < 0) {
+    return ftp_perror(env);
+  }
+
+  if(ftp_active_printf(env, "150 Opening data transfer\r\n")) {
+    return -1;
+  }
+
+  if(ftp_data_open(env)) {
+    return ftp_perror(env);
+  }
+
+  if(io_ncopy(fd, env->data_fd, st.st_size - off)) {
+    err = ftp_perror(env);
+    ftp_data_close(env);
+    return err;
+  }
+
+  if(ftp_data_close(env)) {
+    return ftp_perror(env);
+  }
+
+  return ftp_active_printf(env, "226 Transfer completed\r\n");
+}
+
+
+/**
+ * Retreive an ELF file embedded within a SELF file.
+ **/
+static int
+ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd) {
+  FILE* tmpf;
+  int err;
+
+  if(!(tmpf=tmpfile())) {
+    return ftp_perror(env);
+  }
+
+  if(ftp_active_printf(env, "150-Extracting ELF...\r\n")) {
+    fclose(tmpf);
+    return -1;
+  }
+  if(self_extract_elf(fd, fileno(tmpf))) {
+    if(errno != EBADMSG) {
+      err = ftp_perror(env);
+      fclose(tmpf);
+      return err;
+    }
+    if(ftp_active_printf(env, "150-Warning: ELF digest mismatch\r\n")) {
+      fclose(tmpf);
+      return -1;
+    }
+  }
+
+  rewind(tmpf);
+  err = ftp_cmd_RETR_fd(env, fileno(tmpf));
+  fclose(tmpf);
+
+  return err;
+}
+
+
+/**
+ * Retreive data from a given file.
+ **/
+int
+ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
+  char path[PATH_MAX];
+  int err;
   int fd;
 
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: RETR <PATH>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
-  if(stat(pathbuf, &st)) {
+  ftp_abspath(env, path, arg);
+  if((fd=open(path, O_RDONLY, 0)) < 0) {
     return ftp_perror(env);
   }
 
-  if(S_ISDIR(st.st_mode)) {
-    return ftp_active_printf(env, "550 Not a file\r\n");
-  }
-  if(off >= st.st_size) {
-    off = st.st_size;
-  }
-
-  if((fd=open(pathbuf, O_RDONLY, 0)) < 0) {
-    return ftp_active_printf(env, "550 %s\r\n", strerror(errno));
-  }
-
-  if(lseek(fd, off, SEEK_SET) < 0) {
-    close(fd);
-    return ftp_active_printf(env, "550 %s\r\n", strerror(errno));
-  }
-
-  if(ftp_active_printf(env, "150 Opening data transfer\r\n")) {
-    close(fd);
-    return -1;
-  }
-
-  if(ftp_data_open(env)) {
-    err = ftp_perror(env);
-    close(fd);
-    return err;
-  }
-
-  if(io_ncopy(fd, env->data_fd, st.st_size - off)) {
-    err = ftp_perror(env);
-    ftp_data_close(env);
-    close(fd);
-    return err;
+  if(env->self2elf && self_is_valid(path) == 1) {
+    err = ftp_cmd_RETR_self2elf(env, fd);
+  } else {
+    err = ftp_cmd_RETR_fd(env, fd);
   }
 
   close(fd);
-  if(ftp_data_close(env)) {
-    return ftp_perror(env);
-  }
-
-  return ftp_active_printf(env, "226 Transfer completed\r\n");
+  return err;
 }
 
 

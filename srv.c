@@ -160,9 +160,6 @@ ftp_execute(ftp_env_t *env, char *line) {
   }
 
   for(int i=0; i<nb_ftp_commands; i++) {
-    if(env->self2elf && !strcmp("RETR", line)) {
-      return ftp_cmd_RETR_SELF2ELF(env, arg);
-    }
     if(strcmp(line, commands[i].name)) {
       continue;
     }

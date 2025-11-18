@@ -71,36 +71,6 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
 }
 
 
-/**
- * Retreive an ELF file embedded within a SELF file.
- **/
-int
-ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg) {
-  char self[PATH_MAX];
-  char elf[PATH_MAX];
-  int err;
-
-  ftp_abspath(env, self, arg);
-  if(!env->self2elf || self_is_valid(self) != 1) {
-    return ftp_cmd_RETR(env, arg);
-  }
-
-  ftp_active_printf(env, "150-Extracting an ELF from %s\r\n", self);
-  snprintf(elf, sizeof(elf), "/user/temp/tmpftpsrv-%d-%d", getpid(),
-	   env->active_fd);
-  if(self_extract_elf(self, elf)) {
-    err = ftp_perror(env);
-    unlink(elf);
-    return err;
-  }
-
-  err = ftp_cmd_RETR(env, elf);
-  unlink(elf);
-
-  return err;
-}
-
-
 /*
   Local Variables:
   c-file-style: "gnu"

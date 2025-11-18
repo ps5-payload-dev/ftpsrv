@@ -72,21 +72,33 @@ typedef struct self_entry {
 
 
 /**
+ * Data structure that captures extended information associated with an ELF file.
+ **/
+typedef struct self_exinfo {
+  uint64_t authid;
+  uint64_t type;
+  uint64_t app_version;
+  uint64_t fw_version;
+  uint8_t digest[0x20];
+} self_exinfo_t;
+
+
+/**
  *
  **/
 void* self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind);
 
 
 /**
- * Check if the given path is a SELF file.
+ * Extract the ELF embedded within the given SELF.
  **/
-int self_is_valid(const char* path);
+int self_extract_elf(int self_fd, int elf_fd);
 
 
 /**
- * Extract the ELF file embedded within the given SELF file.
+ * Check if the given path is a SELF file.
  **/
-int self_extract_elf(const char* self_path, const char* elf_path);
+int self_is_valid(const char* path);
 
 
 /**
