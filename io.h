@@ -34,5 +34,5 @@ int io_nwrite(int fd, const void* buf, size_t n);
 /**
  * Copy exactly N bytes from one file descriptor to another.
  **/
-int io_ncopy(int fd_in, int fd_out, size_t size);
+int io_ncopy(int fd_in, int fd_out, size_t n);
 
