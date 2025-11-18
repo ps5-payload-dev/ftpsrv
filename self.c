@@ -31,7 +31,7 @@ along with this program; see the file COPYING. If not, see
 
 
 /**
- * Global lock used to address race conditions that may occur when
+ * This global lock is used to address race conditions that may occur when
  * threads atempt to read several SELF files at the same time.
  **/
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
