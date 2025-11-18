@@ -36,3 +36,23 @@ int io_nwrite(int fd, const void* buf, size_t n);
  **/
 int io_ncopy(int fd_in, int fd_out, size_t n);
 
+
+/**
+ * Read exactly N bytes from the given file descriptor without affecting its
+ * position.
+ **/
+int io_pread(int fd, void* buf, size_t n, off_t off);
+
+
+/**
+ * Write exactly N bytes to the given file descriptor without affecting its
+ * position.
+ **/
+int io_pwrite(int fd, const void* buf, size_t n, off_t off);
+
+
+/**
+ * Copy exactly N bytes from one file descriptor to another without afftecting
+ * their positions.
+ **/
+int io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t n);

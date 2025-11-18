@@ -81,3 +81,66 @@ io_ncopy(int fd_in, int fd_out, size_t size) {
   return 0;
 }
 
+
+
+int
+io_pread(int fd, void* buf, size_t n, off_t off) {
+  int r;
+
+  if((r=pread(fd, buf, n, off)) < 0) {
+    return -1;
+  }
+
+  if(r != n) {
+    errno = EIO;
+    return -1;
+  }
+
+  return 0;
+}
+
+
+int
+io_pwrite(int fd, const void* buf, size_t n, off_t off) {
+  int r;
+
+  if((r=pwrite(fd, buf, n, off)) < 0) {
+    return -1;
+  }
+
+  if(r != n) {
+    errno = EIO;
+    return -1;
+  }
+
+  return 0;
+}
+
+
+int
+io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t size) {
+  size_t copied = 0;
+  char buf[0x4000];
+  ssize_t n;
+
+  while(copied < size) {
+    n = size - copied;
+    if(n > sizeof(buf)) {
+      n = sizeof(buf);
+    }
+
+    if(io_pread(fd_in, buf, n, off_in)) {
+      return -1;
+    }
+    if(io_pwrite(fd_out, buf, n, off_out)) {
+      return -1;
+    }
+
+    off_out += n;
+    off_in += n;
+    copied += n;
+  }
+
+  return 0;
+}
+
