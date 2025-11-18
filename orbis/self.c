@@ -27,7 +27,8 @@ along with this program; see the file COPYING. If not, see
 
 void*
 self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind) {
-  return mmap(0, phdr->p_filesz, PROT_READ, MAP_PRIVATE | MAP_SELF,
+  return mmap(0, phdr->p_filesz, PROT_READ,
+	      MAP_PRIVATE | MAP_ALIGNED(phdr->p_align) | MAP_SELF,
 	      fd, ind << 32);
 }
 
