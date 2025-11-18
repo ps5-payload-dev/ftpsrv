@@ -496,7 +496,7 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
     return ftp_perror(env);
   }
 
-  if(ftp_active_printf(env, "150 Opening data transfer\r\n")) {
+  if(ftp_active_printf(env, "150 Starting data transfer\r\n")) {
     return -1;
   }
 
