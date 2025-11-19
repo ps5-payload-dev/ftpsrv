@@ -366,6 +366,10 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
       continue;
     }
 
+    if(env->self2elf && self_is_valid(pathbuf) == 1) {
+      statbuf.st_size = self_get_elfsize(pathbuf);
+    }
+
     ftp_mode_string(statbuf.st_mode, modebuf);
     localtime_r((const time_t *)&(statbuf.st_ctim), &tm);
     strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &tm);
