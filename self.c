@@ -136,6 +136,69 @@ zeropad(int fd, off_t off, off_t len) {
 }
 
 
+static size_t
+self_get_elfsize_fd(int fd) {
+  self_head_t head;
+  Elf64_Ehdr ehdr;
+  Elf64_Phdr phdr;
+  off_t elf_off;
+  size_t size = 0;
+
+  if(io_nread(fd, &head, sizeof(head))) {
+    return 0;
+  }
+
+  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
+    return 0;
+  }
+
+  if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
+    return 0;
+  }
+
+  elf_off = lseek(fd, 0, SEEK_CUR);
+  if(io_nread(fd, &ehdr, sizeof(ehdr))) {
+    return 0;
+  }
+
+  if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
+     ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
+    return 0;
+  }
+
+  if(lseek(fd, elf_off + ehdr.e_phoff, SEEK_SET) < 0) {
+    return 0;
+  }
+
+  for(int i=0; i<ehdr.e_phnum; i++) {
+    if(io_nread(fd, &phdr, sizeof(phdr))) {
+      return 0;
+    }
+    if(phdr.p_offset + phdr.p_filesz > size) {
+      size = phdr.p_offset + phdr.p_filesz;
+    }
+  }
+
+  return size;
+}
+
+
+size_t
+self_get_elfsize(const char* path) {
+  size_t size;
+  int fd;
+
+  if((fd=open(path, O_RDONLY, 0)) < 0) {
+    return -1;
+  }
+
+  size = self_get_elfsize_fd(fd);
+  close(fd);
+
+  return size;
+}
+
+
 int
 self_extract_elf(int self_fd, int elf_fd) {
   uint8_t hash[SHA256_BLOCK_SIZE];
@@ -148,6 +211,13 @@ self_extract_elf(int self_fd, int elf_fd) {
   size_t elf_size;
   off_t elf_off;
   off_t off;
+
+  // Ensure wholes in the ELF file are all zeroed out
+  elf_size = self_get_elfsize_fd(self_fd);
+  if(zeropad(elf_fd, 0, elf_size)) {
+    return -1;
+  }
+  lseek(self_fd, 0, SEEK_SET);
 
   // Read the SELF header
   if(io_nread(self_fd, &head, sizeof(head))) {
@@ -265,11 +335,6 @@ self_extract_elf(int self_fd, int elf_fd) {
 
   free(entries);
 
-  // Add zero padding in place of missing segments
-  if(zeropad(elf_fd, 0, elf_size)) {
-    return -1;
-  }
-
   // Compute the SHA256 sum of the ELF
   if(sha256sum(elf_fd, hash)) {
     return -1;
@@ -289,7 +354,7 @@ self_extract_elf(int self_fd, int elf_fd) {
     return -1;
   }
 
-  // Compare the computed ELF SHA256 sum with the expected one embedded
+  // Compare the computed ELF SHA256 sum with the expected one
   // available in the SELF extended info
   if(memcmp(hash, extinfo.digest, sizeof(hash))) {
     errno = EBADMSG;
@@ -327,70 +392,6 @@ self_is_valid(const char* path) {
 
   close(fd);
   return 1;
-}
-
-
-size_t
-self_get_elfsize(const char* path) {
-  self_head_t head;
-  Elf64_Ehdr ehdr;
-  Elf64_Phdr phdr;
-  off_t elf_off;
-  size_t size = 0;
-  int fd;
-
-  if((fd=open(path, O_RDONLY, 0)) < 0) {
-    return 0;
-  }
-
-  if(io_nread(fd, &head, sizeof(head))) {
-    close(fd);
-    return 0;
-  }
-
-  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
-    close(fd);
-    return 0;
-  }
-
-  if(lseek(fd, head.num_entries * sizeof(self_entry_t), SEEK_CUR) < 0) {
-    close(fd);
-    return 0;
-  }
-
-  elf_off = lseek(fd, 0, SEEK_CUR);
-  if(io_nread(fd, &ehdr, sizeof(ehdr))) {
-    close(fd);
-    return 0;
-  }
-
-  if(ehdr.e_ident[0] != 0x7f || ehdr.e_ident[1] != 'E' ||
-     ehdr.e_ident[2] != 'L'  || ehdr.e_ident[3] != 'F') {
-    close(fd);
-    return 0;
-  }
-
-  if(lseek(fd, elf_off + ehdr.e_phoff, SEEK_SET) < 0) {
-    close(fd);
-    return 0;
-  }
-
-  for(int i=0; i<ehdr.e_phnum; i++) {
-    if(io_nread(fd, &phdr, sizeof(phdr))) {
-      close(fd);
-      return 0;
-    }
-    if(!phdr.p_filesz) {
-      continue;
-    }
-    if(phdr.p_offset + phdr.p_filesz > size) {
-      size = phdr.p_offset + phdr.p_filesz;
-    }
-  }
-
-  close(fd);
-
-  return size;
 }
 
 
