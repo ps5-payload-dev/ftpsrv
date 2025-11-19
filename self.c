@@ -82,7 +82,7 @@ copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
  **/
 static int
 sha256sum(int fd, uint8_t hash[SHA256_BLOCK_SIZE]) {
-  uint8_t buf[0x1000];
+  uint8_t buf[0x1000] = {0};
   SHA256_CTX sha256;
   struct stat st;
   off_t n;
@@ -110,7 +110,7 @@ sha256sum(int fd, uint8_t hash[SHA256_BLOCK_SIZE]) {
  **/
 static int
 zeropad(int fd, off_t off, off_t len) {
-  char buf[0x1000];
+  char buf[0x1000] = {0};
   struct stat st;
   size_t n;
 
