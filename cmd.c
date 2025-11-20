@@ -720,7 +720,7 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return err;
   }
 
-#define READBUF_SIZE 0x200000
+#define READBUF_SIZE 0x2000000
 
   if(!(readbuf=malloc(READBUF_SIZE))) {
     err = ftp_perror(env);
