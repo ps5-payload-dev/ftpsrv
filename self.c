@@ -288,9 +288,7 @@ self_extract_elf(int self_fd, int elf_fd) {
       free(entries);
       return -1;
     }
-    if(phdr.p_offset + phdr.p_filesz > elf_size) {
-      elf_size = phdr.p_offset + phdr.p_filesz;
-    }
+
     if(!phdr.p_filesz) {
       continue;
     }
