@@ -111,7 +111,7 @@ sha256sum(int fd, uint8_t hash[SHA256_BLOCK_SIZE]) {
 static int
 zeropad(int fd, off_t off, off_t len) {
   struct stat st;
-  char *buf;
+  void *buf;
   size_t n;
 
   if(fstat(fd, &st)) {
@@ -122,14 +122,12 @@ zeropad(int fd, off_t off, off_t len) {
     return 0;
   }
 
-#define BUFSIZE 0x2000000
-
-  if(!(buf=calloc(1, BUFSIZE))) {
+  if(!(buf=calloc(1, IO_COPY_BUFSIZE))) {
     return -1;
   }
 
-  for(off_t i=st.st_size; i<off+len; i+=BUFSIZE) {
-    n = BUFSIZE;
+  for(off_t i=st.st_size; i<off+len; i+=IO_COPY_BUFSIZE) {
+    n = IO_COPY_BUFSIZE;
     if(i+n > off+len) {
       n = off+len-i;
     }

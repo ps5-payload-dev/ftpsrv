@@ -720,16 +720,14 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return err;
   }
 
-#define READBUF_SIZE 0x2000000
-
-  if(!(readbuf=malloc(READBUF_SIZE))) {
+  if(!(readbuf=malloc(IO_COPY_BUFSIZE))) {
     err = ftp_perror(env);
     ftp_data_close(env);
     close(fd);
     return err;
   }
 
-  while((len=ftp_data_read(env, readbuf, READBUF_SIZE))) {
+  while((len=ftp_data_read(env, readbuf, IO_COPY_BUFSIZE))) {
     if(io_nwrite(fd, readbuf, len)) {
       err = ftp_perror(env);
       ftp_data_close(env);

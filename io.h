@@ -20,6 +20,12 @@ along with this program; see the file COPYING. If not, see
 
 
 /**
+ * Size of the buffer used for copying data from one file descriptor to another.
+ **/
+#define IO_COPY_BUFSIZE 0x2000000
+
+
+/**
  * Read exactly N bytes from the given file descriptor.
  **/
 int io_nread(int fd, void* buf, size_t n);
