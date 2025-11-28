@@ -77,7 +77,6 @@ int ftp_cmd_KILL(ftp_env_t *env, const char* arg);
 int ftp_cmd_MTRW(ftp_env_t *env, const char* arg);
 int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
 int ftp_cmd_SELF(ftp_env_t *env, const char* arg);
-int ftp_cmd_RETR_SELF2ELF(ftp_env_t *env, const char* arg);
 
 
 /**

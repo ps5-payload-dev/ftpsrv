@@ -82,7 +82,6 @@ io_ncopy(int fd_in, int fd_out, size_t size) {
 }
 
 
-
 int
 io_pread(int fd, void* buf, size_t n, off_t off) {
   int r;

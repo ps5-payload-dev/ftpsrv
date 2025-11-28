@@ -11,7 +11,10 @@ PS4 and PS5 (executed without prepending SITE). In particular:
  - MTRW - remount /system and /system_ex with write permissions.
  - SELF - toggle on-the-fly SELF to ELF decryption (enabled by default).
 
-Note: the SELF command operates on induvidual connections.
+Note: the SELF command operates on induvidual connections so use e.g.,
+```console
+john@localhost:ftpsrv$ curl -o libkernel.sprx -Q SELF ftp://ps5:2121/system/common/lib/libkernel.sprx
+```
 
 ## Building for the PS4
 Assuming you have the [ps4-payload-sdk][sdk-ps4] installed on a POSIX machine,
