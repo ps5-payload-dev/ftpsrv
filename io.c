@@ -60,25 +60,32 @@ io_nwrite(int fd, const void* buf, size_t n) {
 int
 io_ncopy(int fd_in, int fd_out, size_t size) {
   size_t copied = 0;
-  char buf[0x4000];
+  void* buf;
   ssize_t n;
+
+  if(!(buf=malloc(IO_COPY_BUFSIZE))) {
+    return -1;
+  }
 
   while(copied < size) {
     n = size - copied;
-    if(n > sizeof(buf)) {
-      n = sizeof(buf);
+    if(n > IO_COPY_BUFSIZE) {
+      n = IO_COPY_BUFSIZE;
     }
 
     if(io_nread(fd_in, buf, n)) {
+      free(buf);
       return -1;
     }
     if(io_nwrite(fd_out, buf, n)) {
+      free(buf);
       return -1;
     }
 
     copied += n;
   }
 
+  free(buf);
   return 0;
 }
 
