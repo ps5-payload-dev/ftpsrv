@@ -39,6 +39,10 @@ the FTP server can be compiled using the following command:
 john@localhost:ftpsrv$ make -f Makefile.posix
 ```
 
+## Known issues
+Some PS5 firmwares below vesion 4 contains a kernel bug where reading from some SELF
+files causes the read syscall to stall.
+
 ## Reporting Bugs
 If you encounter problems with ftpsrv, please [file a github issue][issues].
 If you plan on sending pull requests which affect more than a few lines of code,
