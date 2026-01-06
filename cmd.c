@@ -798,7 +798,7 @@ ftp_cmd_TYPE(ftp_env_t *env, const char* arg) {
 
   switch(arg[0]) {
   case 'A':
-    return ftp_active_printf(env, "504 ASCII mode is not suppoerted\r\n");
+    return ftp_active_printf(env, "504 ASCII mode transfer is not suppoerted\r\n");
   case 'I':
     return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
   default:
