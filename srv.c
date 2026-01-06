@@ -207,7 +207,7 @@ ftp_thread(void *args) {
   env.passive_fd  = -1;
   env.active_fd   = (int)(long)args;
 
-  env.type        = 'A';
+  env.type        = 'I';
   env.data_offset = 0;
   env.self2elf    = 1;
 
