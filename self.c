@@ -372,8 +372,16 @@ self_extract_elf(int self_fd, int elf_fd) {
 int
 self_is_valid(const char* path) {
   self_head_t head;
+  struct stat st;
   ssize_t n;
   int fd;
+
+  if(stat(path, &st)) {
+    return -1;
+  }
+  if(!S_ISREG(st.st_mode)) {
+    return 0;
+  }
 
   if((fd=open(path, O_RDONLY, 0)) < 0) {
     return -1;
