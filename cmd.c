@@ -794,14 +794,16 @@ ftp_cmd_SYST(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_TYPE(ftp_env_t *env, const char* arg) {
+  env->type = arg[0];
+
   switch(arg[0]) {
   case 'A':
+    return ftp_active_printf(env, "504 ASCII mode is not suppoerted\r\n");
   case 'I':
-    env->type = arg[0];
     return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
+  default:
+    return ftp_active_printf(env, "501 Invalid argument to TYPE\r\n");
   }
-
-  return ftp_active_printf(env, "501 Invalid argument to TYPE\r\n");
 }
 
 
