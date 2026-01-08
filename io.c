@@ -248,36 +248,3 @@ io_set_socket_opts(int fd, int is_data) {
 
   return rc;
 }
-
-
-void
-io_probe_tcp_opts(int fd, int *tcp_nodelay, int *tcp_nopush) {
-  if(tcp_nodelay) {
-    *tcp_nodelay = 0;
-  }
-  if(tcp_nopush) {
-    *tcp_nopush = 0;
-  }
-
-#ifdef TCP_NODELAY
-  if(tcp_nodelay) {
-    int one = 1;
-    if(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) == 0) {
-      int zero = 0;
-      *tcp_nodelay = 1;
-      setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &zero, sizeof(zero));
-    }
-  }
-#endif
-
-#ifdef TCP_NOPUSH
-  if(tcp_nopush) {
-    int one = 1;
-    if(setsockopt(fd, IPPROTO_TCP, TCP_NOPUSH, &one, sizeof(one)) == 0) {
-      int zero = 0;
-      *tcp_nopush = 1;
-      setsockopt(fd, IPPROTO_TCP, TCP_NOPUSH, &zero, sizeof(zero));
-    }
-  }
-#endif
-}

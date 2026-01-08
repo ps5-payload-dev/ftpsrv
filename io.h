@@ -84,4 +84,3 @@ int io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t n);
  * Apply socket buffer sizes and latency settings.
  **/
 int io_set_socket_opts(int fd, int is_data);
-void io_probe_tcp_opts(int fd, int *tcp_nodelay, int *tcp_nopush);
