@@ -18,6 +18,7 @@ along with this program; see the file COPYING. If not, see
 
 #include <limits.h>
 #include <netinet/in.h>
+#include <stddef.h>
 #include <unistd.h>
 
 
@@ -32,9 +33,12 @@ typedef struct ftp_env {
 
   char type;
   int self2elf;
+  int self_verify;
   off_t data_offset;
   char rename_path[PATH_MAX];
   struct sockaddr_in data_addr;
+  void *xfer_buf;
+  size_t xfer_buf_size;
 } ftp_env_t;
 
 
@@ -54,8 +58,12 @@ int ftp_cmd_DELE(ftp_env_t *env, const char* arg);
 int ftp_cmd_LIST(ftp_env_t *env, const char* arg);
 int ftp_cmd_MKD (ftp_env_t *env, const char* arg);
 int ftp_cmd_NOOP(ftp_env_t *env, const char* arg);
+int ftp_cmd_EPRT(ftp_env_t *env, const char* arg);
+int ftp_cmd_EPSV(ftp_env_t *env, const char* arg);
 int ftp_cmd_PASV(ftp_env_t *env, const char* arg);
 int ftp_cmd_PORT(ftp_env_t *env, const char* arg);
+int ftp_cmd_NLST(ftp_env_t *env, const char* arg);
+int ftp_cmd_MLSD(ftp_env_t *env, const char* arg);
 int ftp_cmd_PWD (ftp_env_t *env, const char* arg);
 int ftp_cmd_QUIT(ftp_env_t *env, const char* arg);
 int ftp_cmd_REST(ftp_env_t *env, const char* arg);
@@ -68,6 +76,17 @@ int ftp_cmd_STOR(ftp_env_t *env, const char* arg);
 int ftp_cmd_SYST(ftp_env_t *env, const char* arg);
 int ftp_cmd_TYPE(ftp_env_t *env, const char* arg);
 int ftp_cmd_USER(ftp_env_t *env, const char* arg);
+int ftp_cmd_PASS(ftp_env_t *env, const char* arg);
+int ftp_cmd_FEAT(ftp_env_t *env, const char* arg);
+int ftp_cmd_OPTS(ftp_env_t *env, const char* arg);
+int ftp_cmd_MDTM(ftp_env_t *env, const char* arg);
+int ftp_cmd_MLST(ftp_env_t *env, const char* arg);
+int ftp_cmd_STAT(ftp_env_t *env, const char* arg);
+int ftp_cmd_HELP(ftp_env_t *env, const char* arg);
+int ftp_cmd_MODE(ftp_env_t *env, const char* arg);
+int ftp_cmd_STRU(ftp_env_t *env, const char* arg);
+int ftp_cmd_ALLO(ftp_env_t *env, const char* arg);
+int ftp_cmd_ABOR(ftp_env_t *env, const char* arg);
 
 
 /**
@@ -77,6 +96,7 @@ int ftp_cmd_KILL(ftp_env_t *env, const char* arg);
 int ftp_cmd_MTRW(ftp_env_t *env, const char* arg);
 int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
 int ftp_cmd_SELF(ftp_env_t *env, const char* arg);
+int ftp_cmd_SELFCHK(ftp_env_t *env, const char* arg);
 
 
 /**

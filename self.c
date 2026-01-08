@@ -206,7 +206,7 @@ self_get_elfsize(const char* path) {
 
 
 int
-self_extract_elf(int self_fd, int elf_fd) {
+self_extract_elf_ex(int self_fd, int elf_fd, int verify) {
   uint8_t hash[SHA256_BLOCK_SIZE];
   self_exinfo_t extinfo;
   self_entry_t* entries;
@@ -339,6 +339,10 @@ self_extract_elf(int self_fd, int elf_fd) {
 
   free(entries);
 
+  if(!verify) {
+    return 0;
+  }
+
   // Compute the SHA256 sum of the ELF
   if(sha256sum(elf_fd, hash)) {
     return -1;
@@ -366,6 +370,12 @@ self_extract_elf(int self_fd, int elf_fd) {
   }
 
   return 0;
+}
+
+
+int
+self_extract_elf(int self_fd, int elf_fd) {
+  return self_extract_elf_ex(self_fd, elf_fd, 1);
 }
 
 
