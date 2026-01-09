@@ -885,7 +885,6 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
   char modebuf[20];
   struct tm tm;
   DIR *dir;
-  int dir_fd = -1;
   int ret = 0;
 
   dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
@@ -911,14 +910,16 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
   }
 
   ftp_active_printf(env, "150 Opening data transfer\r\n");
-  dir_fd = dirfd(dir);
+#if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
+  int dir_fd = dirfd(dir);
+#endif
 
   while ((ent = readdir(dir)))
   {
     int have_path = 0;
     int stat_rc;
 
-#ifdef AT_SYMLINK_NOFOLLOW
+#if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
     if (dir_fd >= 0)
     {
       stat_rc = fstatat(dir_fd, ent->d_name, &statbuf, AT_SYMLINK_NOFOLLOW);
@@ -942,7 +943,11 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
         snprintf(pathbuf, sizeof(pathbuf), "%s/%s", dir_path, ent->d_name);
       }
       have_path = 1;
+#ifdef AT_SYMLINK_NOFOLLOW
+      if (lstat(pathbuf, &statbuf) != 0)
+#else
       if (stat(pathbuf, &statbuf) != 0)
+#endif
       {
         continue;
       }
@@ -1151,7 +1156,6 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
   struct dirent *ent;
   struct stat statbuf;
   DIR *dir;
-  int dir_fd = -1;
   int ret = 0;
 
   dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
@@ -1177,7 +1181,9 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
   }
 
   ftp_active_printf(env, "150 Opening data transfer\r\n");
-  dir_fd = dirfd(dir);
+#if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
+  int dir_fd = dirfd(dir);
+#endif
 
   while ((ent = readdir(dir)))
   {
@@ -1187,7 +1193,7 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
     uintmax_t size = 0;
     char timebuf[32];
 
-#ifdef AT_SYMLINK_NOFOLLOW
+#if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
     if (dir_fd >= 0)
     {
       stat_rc = fstatat(dir_fd, ent->d_name, &statbuf, AT_SYMLINK_NOFOLLOW);
@@ -1211,7 +1217,11 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
         snprintf(pathbuf, sizeof(pathbuf), "%s/%s", dir_path, ent->d_name);
       }
       have_path = 1;
+#ifdef AT_SYMLINK_NOFOLLOW
+      if (lstat(pathbuf, &statbuf) != 0)
+#else
       if (stat(pathbuf, &statbuf) != 0)
+#endif
       {
         continue;
       }

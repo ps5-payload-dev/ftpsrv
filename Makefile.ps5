@@ -27,7 +27,7 @@ ELF := ftpsrv-ps5.elf
 
 VERSION_TAG := $(shell git describe --abbrev=6 --dirty --always --tags)
 
-CFLAGS := $(CFLAGS) -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\" -I. -O2 -DNDEBUG -march=znver2 -mtune=znver2
+CFLAGS := $(CFLAGS) -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\" -I. -O3 -DNDEBUG -march=znver2 -mtune=znver2 -flto
 SOURCE := srv.c cmd.c notify.c io.c self.c sha256.c
 SOURCE += prospero/main.c prospero/cmd.c prospero/self.c
 
