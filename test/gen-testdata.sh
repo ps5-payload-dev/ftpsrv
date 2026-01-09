@@ -20,19 +20,22 @@ for i in $(seq 1 $LARGE_NUMBER); do
     echo "hello, world" > "testdata2/file$i.txt"
 done
 
-exit 0
 
-echo "testdata3: large number of folders with a large number of small text files"
+echo "testdata3: a single large binary file"
 rm -rf testdata3
 mkdir -p testdata3
-for i in $(seq 1 $LARGE_NUMBER); do
-    mkdir -p "testdata3/folder$i"
-    for j in $(seq 1 $LARGE_NUMBER); do
-	echo "hello, world" > "testdata3/folder$i/file$j.txt"
-    done
-done
+head -c 1G /dev/urandom > testdata3/1GB.bin
 
-echo "testdata4: a single large binary file"
+
+exit 0
+
+
+echo "testdata4: large number of folders with a large number of small text files"
 rm -rf testdata4
 mkdir -p testdata4
-head -c 1G /dev/urandom > testdata4/1GB.bin
+for i in $(seq 1 $LARGE_NUMBER); do
+    mkdir -p "testdata4/folder$i"
+    for j in $(seq 1 $LARGE_NUMBER); do
+	echo "hello, world" > "testdata4/folder$i/file$j.txt"
+    done
+done
