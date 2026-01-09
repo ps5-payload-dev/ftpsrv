@@ -696,7 +696,6 @@ int
 ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
   off_t off = env->data_offset;
   char pathbuf[PATH_MAX];
-  void* readbuf;
   int err = 0;
   size_t len;
   int fd;
@@ -733,25 +732,15 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return err;
   }
 
-  if(!(readbuf=malloc(IO_COPY_BUFSIZE))) {
-    err = ftp_perror(env);
-    ftp_data_close(env);
-    close(fd);
-    return err;
-  }
-
-  while((len=ftp_data_read(env, readbuf, IO_COPY_BUFSIZE))) {
-    if(io_nwrite(fd, readbuf, len)) {
+  while((len=ftp_data_read(env, env->readbuf, env->readbuf_size)) > 0) {
+    if(io_nwrite(fd, env->readbuf, len)) {
       err = ftp_perror(env);
       ftp_data_close(env);
-      free(readbuf);
       close(fd);
       return err;
     }
     off += len;
   }
-
-  free(readbuf);
 
   if(ftruncate(fd, off)) {
     err = ftp_perror(env);

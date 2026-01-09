@@ -215,7 +215,13 @@ ftp_thread(void *args) {
   memset(env.rename_path, 0, sizeof(env.rename_path));
   memset(&env.data_addr, 0, sizeof(env.data_addr));
 
-  running = !ftp_greet(&env);
+  env.readbuf_size = IO_COPY_BUFSIZE;
+  if(!(env.readbuf=malloc(env.readbuf_size))) {
+    FTP_LOG_PERROR("malloc");
+    running = 0;
+  } else {
+    running = !ftp_greet(&env);
+  }
 
   while(running) {
     if(!(line=ftp_readline(env.active_fd))) {
@@ -244,6 +250,10 @@ ftp_thread(void *args) {
 
   if(env.data_fd > 0) {
     close(env.data_fd);
+  }
+
+  if(env.readbuf) {
+    free(env.readbuf);
   }
 
   pthread_exit(NULL);
