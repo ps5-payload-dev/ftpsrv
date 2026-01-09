@@ -70,6 +70,7 @@ int
 ftp_data_open(ftp_env_t *env) {
   struct sockaddr_in data_addr;
   socklen_t addr_len;
+  int opt;
 
   if(env->data_addr.sin_port) {
     if(connect(env->data_fd, (struct sockaddr*)&env->data_addr,
@@ -81,6 +82,14 @@ ftp_data_open(ftp_env_t *env) {
 			    &addr_len)) < 0) {
       return -1;
     }
+  }
+
+  opt = 0x100000;
+  if(setsockopt(env->data_fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt)) < 0) {
+    return -1;
+  }
+  if(setsockopt(env->data_fd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt)) < 0) {
+    return -1;
   }
 
   return 0;
