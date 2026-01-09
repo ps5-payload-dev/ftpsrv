@@ -22,7 +22,7 @@ along with this program; see the file COPYING. If not, see
 /**
  * Size of the buffer used for copying data from one file descriptor to another.
  **/
-#define IO_COPY_BUFSIZE 0x2000000
+#define IO_COPY_BUFSIZE 0x100000
 
 
 /**
