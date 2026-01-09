@@ -289,7 +289,7 @@ ftp_thread(void *args)
 
   env.type = 'I';
   env.data_offset = 0;
-  env.self2elf = 1;
+  env.self2elf = 0;
   env.self_verify = 1;
 
   strcpy(env.cwd, "/");
@@ -457,7 +457,7 @@ int ftp_serve(uint16_t port, int notify_user)
     return -1;
   }
 
-  if (listen(srvfd, 5) != 0)
+  if (listen(srvfd, FTP_LISTEN_BACKLOG) != 0)
   {
     FTP_LOG_PERROR("listen");
     return -1;

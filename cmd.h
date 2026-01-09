@@ -21,6 +21,10 @@ along with this program; see the file COPYING. If not, see
 #include <stddef.h>
 #include <unistd.h>
 
+#ifndef FTP_LISTEN_BACKLOG
+#define FTP_LISTEN_BACKLOG 64
+#endif
+
 
 /**
  * Data structure that captures the current state of a client.

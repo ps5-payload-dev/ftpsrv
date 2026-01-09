@@ -671,6 +671,13 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
+  if (setsockopt(env->passive_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+  {
+    int ret = ftp_perror(env);
+    close(env->passive_fd);
+    return ret;
+  }
+
   memset(&sockaddr, 0, sockaddr_len);
   sockaddr.sin_family = AF_INET;
   sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -683,7 +690,7 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
     return ret;
   }
 
-  if (listen(env->passive_fd, 5) != 0)
+  if (listen(env->passive_fd, FTP_LISTEN_BACKLOG) != 0)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
@@ -734,6 +741,13 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
+  if (setsockopt(env->passive_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
+  {
+    int ret = ftp_perror(env);
+    close(env->passive_fd);
+    return ret;
+  }
+
   memset(&sockaddr, 0, sockaddr_len);
   sockaddr.sin_family = AF_INET;
   sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -746,7 +760,7 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
     return ret;
   }
 
-  if (listen(env->passive_fd, 5) != 0)
+  if (listen(env->passive_fd, FTP_LISTEN_BACKLOG) != 0)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
