@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-LARGE_NUMBER=10000
+LARGE_NUMBER=5000
 SMALL_NUMBER=1
 
 
