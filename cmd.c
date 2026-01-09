@@ -707,6 +707,10 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: STOR <FILENAME>\r\n");
   }
 
+  if(env->type == 'A') {
+    return ftp_active_printf(env, "504 STOR in ASCII mode is not supported\r\n");
+  }
+
   ftp_abspath(env, pathbuf, arg);
   if((fd=open(pathbuf, O_CREAT | O_WRONLY, 0777)) < 0) {
     return ftp_perror(env);
@@ -807,7 +811,6 @@ ftp_cmd_TYPE(ftp_env_t *env, const char* arg) {
 
   switch(arg[0]) {
   case 'A':
-    return ftp_active_printf(env, "504 ASCII mode transfer is not suppoerted\r\n");
   case 'I':
     return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
   default:
