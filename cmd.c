@@ -190,6 +190,7 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   struct sockaddr_in sockaddr;
   uint32_t addr = 0;
   uint16_t port = 0;
+  int ret = 0;
 
   if(getsockname(env->active_fd, (struct sockaddr*)&sockaddr, &sockaddr_len)) {
     return ftp_perror(env);
@@ -210,19 +211,19 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   sockaddr.sin_port = htons(0);
 
   if(bind(env->passive_fd, (struct sockaddr*)&sockaddr, sockaddr_len) != 0) {
-    int ret = ftp_perror(env);
+    ret = ftp_perror(env);
     close(env->passive_fd);
     return ret;
   }
 
   if(listen(env->passive_fd, 5) != 0) {
-    int ret = ftp_perror(env);
+    ret = ftp_perror(env);
     close(env->passive_fd);
     return ret;
   }
 
   if(getsockname(env->passive_fd, (struct sockaddr*)&sockaddr, &sockaddr_len)) {
-    int ret = ftp_perror(env);
+    ret = ftp_perror(env);
     close(env->passive_fd);
     return ret;
   }
