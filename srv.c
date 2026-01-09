@@ -363,7 +363,9 @@ ftp_serve(uint16_t port, int notify_user) {
       break;
     }
 
-    pthread_create(&trd, NULL, ftp_thread, (void*)(long)connfd);
+    if(!pthread_create(&trd, NULL, ftp_thread, (void*)(long)connfd)) {
+      pthread_detach(trd);
+    }
   }
 
   return close(srvfd);
