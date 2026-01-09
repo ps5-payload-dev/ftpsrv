@@ -216,7 +216,7 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
     return ret;
   }
 
-  if(listen(env->passive_fd, 5) != 0) {
+  if(listen(env->passive_fd, SOMAXCONN) != 0) {
     ret = ftp_perror(env);
     close(env->passive_fd);
     return ret;
