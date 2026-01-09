@@ -350,7 +350,7 @@ ftp_serve(uint16_t port, int notify_user) {
     return -1;
   }
 
-  if(listen(srvfd, 5) != 0) {
+  if(listen(srvfd, SOMAXCONN) != 0) {
     FTP_LOG_PERROR("listen");
     return -1;
   }
