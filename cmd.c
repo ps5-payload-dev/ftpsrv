@@ -176,7 +176,9 @@ ftp_normpath(const char *path, char *out, size_t out_size)
 int ftp_data_open(ftp_env_t *env)
 {
   struct sockaddr_in data_addr;
+  struct sockaddr_in ctrl_addr;
   socklen_t addr_len;
+  socklen_t ctrl_len;
 
   if (env->data_addr.sin_port)
   {
@@ -207,6 +209,28 @@ int ftp_data_open(ftp_env_t *env)
     if ((env->data_fd = accept(env->passive_fd, (struct sockaddr *)&data_addr,
                                &addr_len)) < 0)
     {
+      return -1;
+    }
+
+    close(env->passive_fd);
+    env->passive_fd = -1;
+
+    memset(&ctrl_addr, 0, sizeof(ctrl_addr));
+    ctrl_len = sizeof(ctrl_addr);
+    if (getpeername(env->active_fd, (struct sockaddr *)&ctrl_addr, &ctrl_len) !=
+        0)
+    {
+      close(env->data_fd);
+      env->data_fd = -1;
+      errno = EACCES;
+      return -1;
+    }
+    if (ctrl_addr.sin_family != AF_INET ||
+        ctrl_addr.sin_addr.s_addr != data_addr.sin_addr.s_addr)
+    {
+      close(env->data_fd);
+      env->data_fd = -1;
+      errno = EACCES;
       return -1;
     }
   }
