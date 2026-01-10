@@ -55,6 +55,7 @@ typedef struct ftp_reader
   size_t pos;
   size_t len;
   int line_too_long;
+  int timed_out;
 } ftp_reader_t;
 
 /**
@@ -131,6 +132,8 @@ ftp_reader_fill(ftp_reader_t *reader)
 {
   ssize_t len;
 
+  reader->timed_out = 0;
+
   do
   {
     len = read(reader->fd, reader->buf, sizeof(reader->buf));
@@ -138,6 +141,17 @@ ftp_reader_fill(ftp_reader_t *reader)
 
   if (len <= 0)
   {
+    if (len < 0 && (errno == EAGAIN
+#ifdef EWOULDBLOCK
+                    || errno == EWOULDBLOCK
+#endif
+#ifdef ETIMEDOUT
+                    || errno == ETIMEDOUT
+#endif
+                        ))
+    {
+      reader->timed_out = 1;
+    }
     return -1;
   }
 
@@ -164,6 +178,7 @@ ftp_readline(ftp_reader_t *reader)
   }
 
   reader->line_too_long = 0;
+  reader->timed_out = 0;
 
   while (1)
   {
@@ -379,6 +394,10 @@ ftp_thread(void *args)
   {
     if (!(line = ftp_readline(&reader)))
     {
+      if (reader.timed_out)
+      {
+        ftp_active_printf(&env, "421 Control connection timed out\r\n");
+      }
       break;
     }
 

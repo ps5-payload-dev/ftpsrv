@@ -538,6 +538,35 @@ int ftp_perror(ftp_env_t *env)
   return ftp_active_printf(env, "550 %s\r\n", buf);
 }
 
+static int
+ftp_errno_is_timeout(int e)
+{
+  if (e == EAGAIN
+#ifdef EWOULDBLOCK
+      || e == EWOULDBLOCK
+#endif
+#ifdef ETIMEDOUT
+      || e == ETIMEDOUT
+#endif
+  )
+  {
+    return 1;
+  }
+  return 0;
+}
+
+static int
+ftp_data_xfer_error_reply(ftp_env_t *env)
+{
+  int e = errno;
+  if (ftp_errno_is_timeout(e))
+  {
+    return ftp_active_printf(env, "426 Data connection timed out\r\n");
+  }
+  errno = e;
+  return ftp_perror(env);
+}
+
 void ftp_abspath(ftp_env_t *env, char *abspath, const char *path)
 {
   char buf[PATH_MAX + 1];
@@ -921,7 +950,7 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
   char modebuf[20];
   struct tm tm;
   DIR *dir;
-  int ret = 0;
+  int xfer_failed = 0;
 
   dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
   if (dir_path)
@@ -1053,7 +1082,8 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
     {
       if (out_len && io_nwrite(env->data_fd, outbuf, out_len))
       {
-        ret = ftp_perror(env);
+        (void)ftp_data_xfer_error_reply(env);
+        xfer_failed = 1;
         break;
       }
       out_len = 0;
@@ -1063,7 +1093,8 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
     {
       if (io_nwrite(env->data_fd, linebuf, (size_t)line_len))
       {
-        ret = ftp_perror(env);
+        (void)ftp_data_xfer_error_reply(env);
+        xfer_failed = 1;
         break;
       }
     }
@@ -1074,44 +1105,34 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
     }
   }
 
-  if (!ret && out_len)
+  if (!xfer_failed && out_len)
   {
     if (io_nwrite(env->data_fd, outbuf, out_len))
     {
-      ret = ftp_perror(env);
+      (void)ftp_data_xfer_error_reply(env);
+      xfer_failed = 1;
     }
   }
 
   if (ftp_data_close(env))
   {
-    int err = ftp_perror(env);
-    if (!ret)
-    {
-      ret = err;
-    }
+    (void)ftp_perror(env);
+    xfer_failed = 1;
   }
 
   if (closedir(dir))
   {
-    int err = ftp_perror(env);
-    if (!ret)
-    {
-      ret = err;
-    }
-  }
-
-  if (ret)
-  {
-    if (free_outbuf)
-    {
-      free(outbuf);
-    }
-    return ret;
+    (void)ftp_perror(env);
+    xfer_failed = 1;
   }
 
   if (free_outbuf)
   {
     free(outbuf);
+  }
+  if (xfer_failed)
+  {
+    return 0;
   }
   return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
@@ -1131,7 +1152,7 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
   size_t out_len = 0;
   struct dirent *ent;
   DIR *dir;
-  int ret = 0;
+  int xfer_failed = 0;
 
   dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
   if (dir_path)
@@ -1192,7 +1213,8 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
     {
       if (out_len && io_nwrite(env->data_fd, outbuf, out_len))
       {
-        ret = ftp_perror(env);
+        (void)ftp_data_xfer_error_reply(env);
+        xfer_failed = 1;
         break;
       }
       out_len = 0;
@@ -1202,7 +1224,8 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
     {
       if (io_nwrite(env->data_fd, linebuf, (size_t)line_len))
       {
-        ret = ftp_perror(env);
+        (void)ftp_data_xfer_error_reply(env);
+        xfer_failed = 1;
         break;
       }
     }
@@ -1213,44 +1236,34 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
     }
   }
 
-  if (!ret && out_len)
+  if (!xfer_failed && out_len)
   {
     if (io_nwrite(env->data_fd, outbuf, out_len))
     {
-      ret = ftp_perror(env);
+      (void)ftp_data_xfer_error_reply(env);
+      xfer_failed = 1;
     }
   }
 
   if (ftp_data_close(env))
   {
-    int err = ftp_perror(env);
-    if (!ret)
-    {
-      ret = err;
-    }
+    (void)ftp_perror(env);
+    xfer_failed = 1;
   }
 
   if (closedir(dir))
   {
-    int err = ftp_perror(env);
-    if (!ret)
-    {
-      ret = err;
-    }
-  }
-
-  if (ret)
-  {
-    if (free_outbuf)
-    {
-      free(outbuf);
-    }
-    return ret;
+    (void)ftp_perror(env);
+    xfer_failed = 1;
   }
 
   if (free_outbuf)
   {
     free(outbuf);
+  }
+  if (xfer_failed)
+  {
+    return 0;
   }
   return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
@@ -1272,7 +1285,7 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
   struct dirent *ent;
   struct stat statbuf;
   DIR *dir;
-  int ret = 0;
+  int xfer_failed = 0;
 
   dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
   if (dir_path)
@@ -1425,7 +1438,8 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
     {
       if (out_len && io_nwrite(env->data_fd, outbuf, out_len))
       {
-        ret = ftp_perror(env);
+        (void)ftp_data_xfer_error_reply(env);
+        xfer_failed = 1;
         break;
       }
       out_len = 0;
@@ -1435,7 +1449,8 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
     {
       if (io_nwrite(env->data_fd, linebuf, (size_t)line_len))
       {
-        ret = ftp_perror(env);
+        (void)ftp_data_xfer_error_reply(env);
+        xfer_failed = 1;
         break;
       }
     }
@@ -1446,44 +1461,34 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
     }
   }
 
-  if (!ret && out_len)
+  if (!xfer_failed && out_len)
   {
     if (io_nwrite(env->data_fd, outbuf, out_len))
     {
-      ret = ftp_perror(env);
+      (void)ftp_data_xfer_error_reply(env);
+      xfer_failed = 1;
     }
   }
 
   if (ftp_data_close(env))
   {
-    int err = ftp_perror(env);
-    if (!ret)
-    {
-      ret = err;
-    }
+    (void)ftp_perror(env);
+    xfer_failed = 1;
   }
 
   if (closedir(dir))
   {
-    int err = ftp_perror(env);
-    if (!ret)
-    {
-      ret = err;
-    }
-  }
-
-  if (ret)
-  {
-    if (free_outbuf)
-    {
-      free(outbuf);
-    }
-    return ret;
+    (void)ftp_perror(env);
+    xfer_failed = 1;
   }
 
   if (free_outbuf)
   {
     free(outbuf);
+  }
+  if (xfer_failed)
+  {
+    return 0;
   }
   return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
@@ -1783,7 +1788,7 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
   {
     if (ftp_copy_ascii_out(env, fd))
     {
-      err = ftp_perror(env);
+      err = ftp_data_xfer_error_reply(env);
       ftp_data_close(env);
       return err;
     }
@@ -1795,14 +1800,14 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
       if (io_ncopy_buf(fd, env->data_fd, remaining, env->xfer_buf,
                        env->xfer_buf_size))
       {
-        err = ftp_perror(env);
+        err = ftp_data_xfer_error_reply(env);
         ftp_data_close(env);
         return err;
       }
     }
     else if (io_ncopy(fd, env->data_fd, remaining))
     {
-      err = ftp_perror(env);
+      err = ftp_data_xfer_error_reply(env);
       ftp_data_close(env);
       return err;
     }
@@ -2093,7 +2098,7 @@ int ftp_cmd_STOR(ftp_env_t *env, const char *arg)
   {
     if (ftp_copy_ascii_in(env, fd, &off))
     {
-      err = ftp_perror(env);
+      err = ftp_data_xfer_error_reply(env);
       ftp_data_close(env);
       if (free_buf)
       {
@@ -2124,7 +2129,7 @@ int ftp_cmd_STOR(ftp_env_t *env, const char *arg)
 
   if (env->type != 'A' && len < 0)
   {
-    err = ftp_perror(env);
+    err = ftp_data_xfer_error_reply(env);
     ftp_data_close(env);
     if (free_buf)
     {
