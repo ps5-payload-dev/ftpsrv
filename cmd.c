@@ -494,8 +494,7 @@ int ftp_data_close(ftp_env_t *env)
 {
   if (env->data_fd < 0)
   {
-    errno = EBADF;
-    return -1;
+    return 0;
   }
 
   if (!close(env->data_fd))
