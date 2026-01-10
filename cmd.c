@@ -362,6 +362,7 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   char modebuf[20];
   struct tm tm;
   DIR *dir;
+  int err;
 
   if(arg[0] && arg[0] != '-') {
     p = arg;
@@ -372,7 +373,9 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   }
 
   if(ftp_data_open(env)) {
-    return ftp_perror(env);
+    err = ftp_perror(env);
+    closedir(dir);
+    return err;
   }
 
   ftp_active_printf(env, "150 Opening data transfer\r\n");
@@ -402,9 +405,9 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   }
 
   if(ftp_data_close(env)) {
-    int ret = ftp_perror(env);
+    err = ftp_perror(env);
     closedir(dir);
-    return ret;
+    return err;
   }
 
   if(closedir(dir)) {
