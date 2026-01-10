@@ -567,6 +567,18 @@ ftp_data_xfer_error_reply(ftp_env_t *env)
   return ftp_perror(env);
 }
 
+static int
+ftp_data_open_error_reply(ftp_env_t *env)
+{
+  int e = errno;
+  if (e == EACCES)
+  {
+    return ftp_active_printf(env, "425 Can't open data connection\r\n");
+  }
+  errno = e;
+  return ftp_perror(env);
+}
+
 void ftp_abspath(ftp_env_t *env, char *abspath, const char *path)
 {
   char buf[PATH_MAX + 1];
@@ -985,12 +997,13 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
 
   if (ftp_data_open(env))
   {
+    int err = ftp_data_open_error_reply(env);
     if (free_outbuf)
     {
       free(outbuf);
     }
     closedir(dir);
-    return ftp_perror(env);
+    return err;
   }
 
   ftp_active_printf(env, "150 Opening data transfer\r\n");
@@ -1187,12 +1200,13 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
 
   if (ftp_data_open(env))
   {
+    int err = ftp_data_open_error_reply(env);
     if (free_outbuf)
     {
       free(outbuf);
     }
     closedir(dir);
-    return ftp_perror(env);
+    return err;
   }
 
   ftp_active_printf(env, "150 Opening data transfer\r\n");
@@ -1320,12 +1334,13 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
 
   if (ftp_data_open(env))
   {
+    int err = ftp_data_open_error_reply(env);
     if (free_outbuf)
     {
       free(outbuf);
     }
     closedir(dir);
-    return ftp_perror(env);
+    return err;
   }
 
   ftp_active_printf(env, "150 Opening data transfer\r\n");
@@ -1781,7 +1796,7 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
 
   if (ftp_data_open(env))
   {
-    return ftp_perror(env);
+    return ftp_data_open_error_reply(env);
   }
 
   if (env->type == 'A')
@@ -2075,7 +2090,7 @@ int ftp_cmd_STOR(ftp_env_t *env, const char *arg)
 
   if (ftp_data_open(env))
   {
-    err = ftp_perror(env);
+    err = ftp_data_open_error_reply(env);
     close(fd);
     return err;
   }
