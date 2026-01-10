@@ -19,6 +19,7 @@ along with this program; see the file COPYING. If not, see
 #include <sys/types.h>
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <ifaddrs.h>
 #include <pthread.h>
@@ -237,6 +238,24 @@ ftp_readline(ftp_reader_t *reader)
   }
 }
 
+static int
+ftp_prefix_ieq(const char *s, const char *prefix, size_t n)
+{
+  for (size_t i = 0; i < n; i++)
+  {
+    unsigned char c = (unsigned char)s[i];
+    if (!c)
+    {
+      return 0;
+    }
+    if (toupper(c) != (unsigned char)prefix[i])
+    {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 /**
  * Execute an FTP command.
  **/
@@ -250,6 +269,11 @@ ftp_execute(ftp_env_t *env, char *line)
   {
     sep[0] = 0;
     arg = sep + 1;
+  }
+
+  for (char *p = line; *p; p++)
+  {
+    *p = (char)toupper((unsigned char)*p);
   }
 
   for (int i = 0; i < nb_ftp_commands; i++)
@@ -352,7 +376,7 @@ ftp_thread(void *args)
     }
 
     cmd = line;
-    if (!strncmp(line, "SITE ", 5))
+    if (ftp_prefix_ieq(line, "SITE ", 5))
     {
       cmd += 5;
     }
