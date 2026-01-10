@@ -46,7 +46,7 @@ UPLOAD_START=$(date +%s)
 test_upload
 UPLOAD_END=$(date +%s)
 UPLOAD_TIME=$((UPLOAD_END - UPLOAD_START))
-echo "Upload time: $UPLOAD_TIME sec"
+echo "Upload time:   $UPLOAD_TIME sec"
 
 DOWNLOAD_START=$(date +%s)
 test_download
@@ -58,11 +58,4 @@ DELETE_START=$(date +%s)
 test_delete
 DELETE_END=$(date +%s)
 DELETE_TIME=$((DELETE_END - DELETE_START))
-echo "Delete time: $DELETE_TIME sec"
-
-echo ""
-echo "Summary"
-echo "-------"
-echo "Upload time:   $UPLOAD_TIME sec"
-echo "Download time: $DOWNLOAD_TIME sec"
 echo "Delete time:   $DELETE_TIME sec"
