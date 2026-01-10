@@ -31,6 +31,10 @@ along with this program; see the file COPYING. If not, see
 #include "log.h"
 #include "notify.h"
 
+#ifndef FTP_MAX_LINE
+#define FTP_MAX_LINE 8192
+#endif
+
 /**
  * Map names of commands to function entry points.
  **/
@@ -49,6 +53,7 @@ typedef struct ftp_reader
   char buf[4096];
   size_t pos;
   size_t len;
+  int line_too_long;
 } ftp_reader_t;
 
 /**
@@ -147,6 +152,7 @@ ftp_readline(ftp_reader_t *reader)
   int bufsize = 1024;
   int position = 0;
   int line_ready = 0;
+  int overflow = 0;
   char *buffer_backup;
   char *buffer = malloc(bufsize);
 
@@ -155,6 +161,8 @@ ftp_readline(ftp_reader_t *reader)
     FTP_LOG_PERROR("malloc");
     return NULL;
   }
+
+  reader->line_too_long = 0;
 
   while (1)
   {
@@ -171,7 +179,10 @@ ftp_readline(ftp_reader_t *reader)
 
     if (c == '\r')
     {
-      buffer[position] = '\0';
+      if (!overflow)
+      {
+        buffer[position] = '\0';
+      }
       line_ready = 1;
       position = 0;
       continue;
@@ -179,9 +190,13 @@ ftp_readline(ftp_reader_t *reader)
 
     if (c == '\n')
     {
-      if (!line_ready)
+      if (!line_ready && !overflow)
       {
         buffer[position] = '\0';
+      }
+      if (overflow)
+      {
+        buffer[0] = '\0';
       }
       return buffer;
     }
@@ -191,11 +206,25 @@ ftp_readline(ftp_reader_t *reader)
       line_ready = 0;
     }
 
-    buffer[position++] = c;
+    if (!overflow)
+    {
+      buffer[position++] = c;
+    }
 
     if (position + 1 >= bufsize)
     {
+      if (bufsize >= FTP_MAX_LINE)
+      {
+        overflow = 1;
+        reader->line_too_long = 1;
+        continue;
+      }
+
       bufsize += 1024;
+      if (bufsize > FTP_MAX_LINE)
+      {
+        bufsize = FTP_MAX_LINE;
+      }
       buffer_backup = buffer;
       buffer = realloc(buffer, bufsize);
       if (!buffer)
@@ -313,6 +342,13 @@ ftp_thread(void *args)
     if (!(line = ftp_readline(&reader)))
     {
       break;
+    }
+
+    if (reader.line_too_long)
+    {
+      ftp_active_printf(&env, "500 Line too long\r\n");
+      free(line);
+      continue;
     }
 
     cmd = line;
