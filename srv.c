@@ -262,6 +262,15 @@ ftp_prefix_ieq(const char *s, const char *prefix, size_t n)
 static int
 ftp_execute(ftp_env_t *env, char *line)
 {
+  while (*line == ' ')
+  {
+    line++;
+  }
+  if (!*line)
+  {
+    return 0;
+  }
+
   char *sep = strchr(line, ' ');
   char *arg = strchr(line, 0);
 
@@ -269,6 +278,11 @@ ftp_execute(ftp_env_t *env, char *line)
   {
     sep[0] = 0;
     arg = sep + 1;
+  }
+
+  while (*arg == ' ')
+  {
+    arg++;
   }
 
   for (char *p = line; *p; p++)
