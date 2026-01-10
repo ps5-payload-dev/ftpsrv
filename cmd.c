@@ -649,7 +649,7 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
 
   env->data_addr.sin_port = 0;
   env->data_addr.sin_addr.s_addr = 0;
-  if (env->data_fd > 0)
+  if (env->data_fd >= 0)
   {
     close(env->data_fd);
     env->data_fd = -1;
@@ -661,9 +661,10 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
   }
   addr = sockaddr.sin_addr.s_addr;
 
-  if (env->passive_fd > 0)
+  if (env->passive_fd >= 0)
   {
     close(env->passive_fd);
+    env->passive_fd = -1;
   }
 
   if ((env->passive_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -675,6 +676,7 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
@@ -687,6 +689,7 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
@@ -694,6 +697,7 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
@@ -701,6 +705,7 @@ int ftp_cmd_PASV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
   port = sockaddr.sin_port;
@@ -725,15 +730,16 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
 
   env->data_addr.sin_port = 0;
   env->data_addr.sin_addr.s_addr = 0;
-  if (env->data_fd > 0)
+  if (env->data_fd >= 0)
   {
     close(env->data_fd);
     env->data_fd = -1;
   }
 
-  if (env->passive_fd > 0)
+  if (env->passive_fd >= 0)
   {
     close(env->passive_fd);
+    env->passive_fd = -1;
   }
 
   if ((env->passive_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -745,6 +751,7 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
@@ -757,6 +764,7 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
@@ -764,6 +772,7 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
@@ -771,6 +780,7 @@ int ftp_cmd_EPSV(ftp_env_t *env, const char *arg)
   {
     int ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
   port = sockaddr.sin_port;
@@ -1498,7 +1508,7 @@ int ftp_cmd_PORT(ftp_env_t *env, const char *arg)
     return ftp_active_printf(env, "501 Usage: PORT <addr>\r\n");
   }
 
-  if (env->passive_fd > 0)
+  if (env->passive_fd >= 0)
   {
     close(env->passive_fd);
     env->passive_fd = -1;
@@ -1576,12 +1586,12 @@ int ftp_cmd_EPRT(ftp_env_t *env, const char *arg)
     return ftp_active_printf(env, "501 Usage: EPRT <d><af><d><addr><d><port><d>\r\n");
   }
 
-  if (env->passive_fd > 0)
+  if (env->passive_fd >= 0)
   {
     close(env->passive_fd);
     env->passive_fd = -1;
   }
-  if (env->data_fd > 0)
+  if (env->data_fd >= 0)
   {
     close(env->data_fd);
     env->data_fd = -1;
@@ -2448,7 +2458,7 @@ int ftp_cmd_ALLO(ftp_env_t *env, const char *arg)
 int ftp_cmd_ABOR(ftp_env_t *env, const char *arg)
 {
   (void)arg;
-  if (env->data_fd > 0)
+  if (env->data_fd >= 0)
   {
     close(env->data_fd);
     env->data_fd = -1;
