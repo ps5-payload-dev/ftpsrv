@@ -40,6 +40,8 @@ along with this program; see the file COPYING. If not, see
 #define FTP_LIST_OUTBUF_SIZE (256 * 1024)
 #endif
 
+#define DISABLE_ASCII_MODE
+
 /**
  * Create a string representation of a file mode.
  **/
@@ -2214,16 +2216,23 @@ int ftp_cmd_SYST(ftp_env_t *env, const char *arg)
  **/
 int ftp_cmd_TYPE(ftp_env_t *env, const char *arg)
 {
-  env->type = arg[0];
-
   switch (arg[0])
   {
+#ifdef DISABLE_ASCII_MODE
+  case 'A':
+  case 'I':
+    env->type = 'I';
+  return ftp_active_printf(env, "200 Type set to I\r\n", env->type);
+#else
   case 'A':
     env->data_offset = 0;
+    env->type = 'A';
     return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
   case 'I':
+    env->type = 'I';
     return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
-  default:
+#endif
+    default:
     return ftp_active_printf(env, "501 Invalid argument to TYPE\r\n");
   }
 }
