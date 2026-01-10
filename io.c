@@ -16,7 +16,9 @@ along with this program; see the file COPYING. If not, see
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -24,6 +26,13 @@ along with this program; see the file COPYING. If not, see
 #include <sys/errno.h>
 
 #include "io.h"
+
+#ifndef FTP_CTRL_TIMEOUT_SEC
+#define FTP_CTRL_TIMEOUT_SEC 600
+#endif
+#ifndef FTP_DATA_TIMEOUT_SEC
+#define FTP_DATA_TIMEOUT_SEC 60
+#endif
 
 
 int
@@ -226,6 +235,22 @@ io_set_socket_opts(int fd, int is_data) {
   }
   if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf)) < 0) {
     rc = -1;
+  }
+
+  int timeout_sec = is_data ? FTP_DATA_TIMEOUT_SEC : FTP_CTRL_TIMEOUT_SEC;
+  if (timeout_sec > 0)
+  {
+    struct timeval tv;
+    memset(&tv, 0, sizeof(tv));
+    tv.tv_sec = timeout_sec;
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0)
+    {
+      rc = -1;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
+    {
+      rc = -1;
+    }
   }
 
 #ifdef TCP_NOPUSH
