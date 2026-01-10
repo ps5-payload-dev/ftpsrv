@@ -30,6 +30,7 @@ along with this program; see the file COPYING. If not, see
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "cmd.h"
 #include "io.h"
@@ -41,6 +42,8 @@ along with this program; see the file COPYING. If not, see
 #endif
 
 #define DISABLE_ASCII_MODE
+// #define IO_USE_SENDFILE  // Disabled. Speed x2 down ?! 
+
 
 /**
  * Create a string representation of a file mode.
@@ -1800,6 +1803,10 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
     return ftp_data_open_error_reply(env);
   }
 
+  #if defined(POSIX_FADV_SEQUENTIAL) && !defined(__ORBIS__)
+    posix_fadvise(fd, off, 0, POSIX_FADV_SEQUENTIAL);
+  #endif
+
   if (env->type == 'A')
   {
     if (ftp_copy_ascii_out(env, fd))
@@ -1811,6 +1818,14 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
   }
   else if (remaining)
   {
+    #ifdef IO_USE_SENDFILE
+    if (io_sendfile(fd, env->data_fd, off, remaining))
+    {
+      err = ftp_data_xfer_error_reply(env);
+      ftp_data_close(env);
+      return err;
+    }
+    #else 
     if (env->xfer_buf && env->xfer_buf_size)
     {
       if (io_ncopy_buf(fd, env->data_fd, remaining, env->xfer_buf,
@@ -1827,6 +1842,8 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
       ftp_data_close(env);
       return err;
     }
+    #endif
+
   }
 
   if (ftp_data_close(env))
