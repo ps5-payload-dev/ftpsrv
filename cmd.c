@@ -666,7 +666,7 @@ ftp_list_path_arg(const char *arg, char *buf, size_t bufsize)
   return buf;
 }
 
-static int
+int
 ftp_strieq(const char *a, const char *b)
 {
   while (*a && *b)
@@ -1068,9 +1068,10 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
         }
         have_path = 1;
       }
-      if (self_is_valid(pathbuf) == 1)
+      size_t elf_size = self_is_valid(pathbuf);
+      if (elf_size)
       {
-        statbuf.st_size = self_get_elfsize(pathbuf);
+        statbuf.st_size = elf_size;
       }
     }
 
@@ -1430,9 +1431,10 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
         }
         have_path = 1;
       }
-      if (self_is_valid(pathbuf) == 1)
+      size_t elf_size = self_is_valid(pathbuf);
+      if (elf_size)
       {
-        size = (uintmax_t)self_get_elfsize(pathbuf);
+        size = (uintmax_t)elf_size;
       }
     }
 
@@ -1915,7 +1917,7 @@ int ftp_cmd_RETR(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
-  if (env->self2elf && self_is_valid(path) == 1)
+  if (env->self2elf && self_is_valid(path))
   {
     err = ftp_cmd_RETR_self2elf(env, fd);
   }
@@ -2449,14 +2451,8 @@ int ftp_cmd_MLST(ftp_env_t *env, const char *arg)
 
   if (env->self2elf && S_ISREG(st.st_mode))
   {
-    if (self_is_valid(pathbuf) == 1)
-    {
-      size = (uintmax_t)self_get_elfsize(pathbuf);
-    }
-    else
-    {
-      size = (uintmax_t)st.st_size;
-    }
+    size_t elf_size = self_is_valid(pathbuf);
+    size = elf_size ? (uintmax_t)elf_size : (uintmax_t)st.st_size;
   }
   else
   {

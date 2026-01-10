@@ -21,14 +21,14 @@ along with this program; see the file COPYING. If not, see
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <ctype.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
 #include "io.h"
 #include "self.h"
 #include "sha256.h"
-
+#include "cmd.h"
 
 /**
  * This global lock is used to address race conditions that may occur when
@@ -379,41 +379,19 @@ self_extract_elf(int self_fd, int elf_fd) {
 }
 
 
-int
+size_t
 self_is_valid(const char* path) {
-  self_head_t head;
-  struct stat st;
-  ssize_t n;
-  int fd;
-
-  if(stat(path, &st)) {
-    return -1;
-  }
-  if(!S_ISREG(st.st_mode)) {
+  const char *dot = strrchr(path, '.');
+  
+  if (!dot){
     return 0;
   }
 
-  if((fd=open(path, O_RDONLY, 0)) < 0) {
-    return -1;
-  }
-
-  if((n=read(fd, &head, sizeof(head))) < 0) {
-    close(fd);
-    return -1;
-  }
-
-  if(n != sizeof(head)) {
-    close(fd);
+  if (!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf") || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx"|| ftp_strieq(dot, ".self")))) {
     return 0;
   }
 
-  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
-    close(fd);
-    return 0;
-  }
-
-  close(fd);
-  return 1;
+  return self_get_elfsize(path);
 }
 
 
