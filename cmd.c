@@ -135,10 +135,10 @@ ftp_data_read(ftp_env_t *env, void *buf, size_t count) {
  **/
 int
 ftp_data_close(ftp_env_t *env) {
-  if(!close(env->data_fd)) {
-    return 0;
+  if(close(env->data_fd)) {
+    return -1;
   }
-  return -1;
+  return 0;
 }
 
 
