@@ -522,6 +522,9 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
   if(fstat(fd, &st)) {
     return ftp_perror(env);
   }
+  if(lseek(fd, off, SEEK_SET) < 0) {
+    return ftp_perror(env);
+  }
 
   if(ftp_active_printf(env, "150 Starting data transfer\r\n")) {
     return -1;
@@ -531,13 +534,13 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
     return ftp_perror(env);
   }
 
-  err = io_sendfile(fd, env->data_fd, off, st.st_size - off);
-
-  if(ftp_data_close(env)) {
-    return ftp_perror(env);
+  if(io_ncopy(fd, env->data_fd, st.st_size - off)) {
+    err = ftp_perror(env);
+    ftp_data_close(env);
+    return err;
   }
 
-  if(err) {
+  if(ftp_data_close(env)) {
     return ftp_perror(env);
   }
 
