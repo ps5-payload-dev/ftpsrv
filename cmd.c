@@ -1523,8 +1523,9 @@ int ftp_cmd_NOOP(ftp_env_t *env, const char *arg)
 int ftp_cmd_PORT(ftp_env_t *env, const char *arg)
 {
   uint8_t addr[6];
-  uint64_t s_addr;
-  uint16_t port;
+  struct in_addr in_addr;
+  uint32_t s_addr_host;
+  uint16_t port_host;
 
   if (sscanf(arg, "%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
              addr, addr + 1, addr + 2, addr + 3, addr + 4, addr + 5) != 6)
@@ -1532,10 +1533,21 @@ int ftp_cmd_PORT(ftp_env_t *env, const char *arg)
     return ftp_active_printf(env, "501 Usage: PORT <addr>\r\n");
   }
 
+  s_addr_host = ((uint32_t)addr[0] << 24) | ((uint32_t)addr[1] << 16) |
+                ((uint32_t)addr[2] << 8) | (uint32_t)addr[3];
+  in_addr.s_addr = htonl(s_addr_host);
+  port_host = (uint16_t)(((uint16_t)addr[4] << 8) | (uint16_t)addr[5]);
+
   if (env->passive_fd >= 0)
   {
     close(env->passive_fd);
     env->passive_fd = -1;
+  }
+
+  if (env->data_fd >= 0)
+  {
+    close(env->data_fd);
+    env->data_fd = -1;
   }
 
   if ((env->data_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -1543,12 +1555,9 @@ int ftp_cmd_PORT(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
-  s_addr = (addr[3] << 24) | (addr[2] << 16) | (addr[1] << 8) | addr[0];
-  port = (addr[5] << 8) | addr[4];
-
   env->data_addr.sin_family = AF_INET;
-  env->data_addr.sin_addr.s_addr = s_addr;
-  env->data_addr.sin_port = port;
+  env->data_addr.sin_addr = in_addr;
+  env->data_addr.sin_port = htons(port_host);
 
   return ftp_active_printf(env, "200 PORT command successful.\r\n");
 }
