@@ -462,7 +462,7 @@ int ftp_serve(uint16_t port, int notify_user)
   if (getifaddrs(&ifaddr) == -1)
   {
     FTP_LOG_PERROR("getifaddrs");
-    exit(EXIT_FAILURE);
+    return 0;
   }
 
   // Enumerate all AF_INET IPs
