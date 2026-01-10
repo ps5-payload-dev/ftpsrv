@@ -1524,6 +1524,8 @@ int ftp_cmd_PORT(ftp_env_t *env, const char *arg)
 {
   uint8_t addr[6];
   struct in_addr in_addr;
+  struct sockaddr_in ctrl_addr;
+  socklen_t ctrl_len;
   uint32_t s_addr_host;
   uint16_t port_host;
 
@@ -1537,6 +1539,19 @@ int ftp_cmd_PORT(ftp_env_t *env, const char *arg)
                 ((uint32_t)addr[2] << 8) | (uint32_t)addr[3];
   in_addr.s_addr = htonl(s_addr_host);
   port_host = (uint16_t)(((uint16_t)addr[4] << 8) | (uint16_t)addr[5]);
+
+  memset(&ctrl_addr, 0, sizeof(ctrl_addr));
+  ctrl_len = sizeof(ctrl_addr);
+  if (getpeername(env->active_fd, (struct sockaddr *)&ctrl_addr, &ctrl_len) !=
+      0)
+  {
+    return ftp_active_printf(env, "500 Illegal PORT command\r\n");
+  }
+  if (ctrl_addr.sin_family != AF_INET ||
+      ctrl_addr.sin_addr.s_addr != in_addr.s_addr)
+  {
+    return ftp_active_printf(env, "500 Illegal PORT command\r\n");
+  }
 
   if (env->passive_fd >= 0)
   {
@@ -1570,6 +1585,8 @@ int ftp_cmd_EPRT(ftp_env_t *env, const char *arg)
   char addrbuf[INET_ADDRSTRLEN] = {0};
   char portbuf[16] = {0};
   char proto[8] = {0};
+  struct sockaddr_in ctrl_addr;
+  socklen_t ctrl_len;
   char delim;
   char *p1;
   char *p2;
@@ -1611,6 +1628,19 @@ int ftp_cmd_EPRT(ftp_env_t *env, const char *arg)
   if (inet_pton(AF_INET, addrbuf, &in_addr) != 1)
   {
     return ftp_active_printf(env, "501 Usage: EPRT <d><af><d><addr><d><port><d>\r\n");
+  }
+
+  memset(&ctrl_addr, 0, sizeof(ctrl_addr));
+  ctrl_len = sizeof(ctrl_addr);
+  if (getpeername(env->active_fd, (struct sockaddr *)&ctrl_addr, &ctrl_len) !=
+      0)
+  {
+    return ftp_active_printf(env, "500 Illegal EPRT command\r\n");
+  }
+  if (ctrl_addr.sin_family != AF_INET ||
+      ctrl_addr.sin_addr.s_addr != in_addr.s_addr)
+  {
+    return ftp_active_printf(env, "500 Illegal EPRT command\r\n");
   }
 
   port_ul = strtoul(portbuf, NULL, 10);
