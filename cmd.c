@@ -66,6 +66,9 @@ ftp_mode_string(mode_t mode, char *buf) {
 }
 
 
+/**
+ * Open the data connection.
+ */
 int
 ftp_data_open(ftp_env_t *env) {
   struct sockaddr_in data_addr;
@@ -106,11 +109,10 @@ ftp_data_printf(ftp_env_t *env, const char *fmt, ...) {
   va_list args;
 
   va_start(args, fmt);
-  vsnprintf(buf, sizeof(buf), fmt, args);
+  len = vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
 
-  len = strlen(buf);
-  if(write(env->data_fd, buf, len) != len) {
+  if(io_nwrite(env->data_fd, buf, len)) {
     return -1;
   }
 
@@ -127,6 +129,9 @@ ftp_data_read(ftp_env_t *env, void *buf, size_t count) {
 }
 
 
+/**
+ * Close the data connection.
+ **/
 int
 ftp_data_close(ftp_env_t *env) {
   if(!close(env->data_fd)) {
@@ -136,6 +141,9 @@ ftp_data_close(ftp_env_t *env) {
 }
 
 
+/**
+ * Write a string to the active connection with printf semantics.
+ **/
 int
 ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
   char buf[0x1000];
@@ -143,10 +151,8 @@ ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
   va_list args;
 
   va_start(args, fmt);
-  vsnprintf(buf, sizeof(buf), fmt, args);
+  len = vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
-
-  len = strlen(buf);
 
   if(io_nwrite(env->active_fd, buf, len)) {
     return -1;
@@ -156,6 +162,9 @@ ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
 }
 
 
+/**
+ * Write a string to the active connection with perror semantics.
+ **/
 int
 ftp_perror(ftp_env_t *env) {
   char buf[255];
@@ -168,6 +177,9 @@ ftp_perror(ftp_env_t *env) {
 }
 
 
+/**
+ * Create an absolute path from the current working directory.
+ **/
 void
 ftp_abspath(ftp_env_t *env, char *abspath, const char *path) {
   char buf[PATH_MAX+1];
@@ -266,7 +278,7 @@ ftp_cmd_CDUP(ftp_env_t *env, const char* arg) {
 
 
 /**
- *
+ * Change the permission mode bits of a path.
  **/
 int
 ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
@@ -342,7 +354,7 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   const char *p = env->cwd;
-  char pathbuf[PATH_MAX*3];
+  char pathbuf[PATH_MAX];
   struct dirent *ent;
   struct stat statbuf;
   char timebuf[20];
