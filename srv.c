@@ -479,6 +479,7 @@ int ftp_serve(uint16_t port, int notify_user)
   if (setsockopt(srvfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
   {
     FTP_LOG_PERROR("setsockopt");
+    close(srvfd);
     return -1;
   }
 
@@ -490,12 +491,14 @@ int ftp_serve(uint16_t port, int notify_user)
   if (bind(srvfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) != 0)
   {
     FTP_LOG_PERROR("bind");
+    close(srvfd);
     return -1;
   }
 
   if (listen(srvfd, FTP_LISTEN_BACKLOG) != 0)
   {
     FTP_LOG_PERROR("listen");
+    close(srvfd);
     return -1;
   }
 
