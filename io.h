@@ -44,6 +44,12 @@ int io_ncopy(int fd_in, int fd_out, size_t n);
 
 
 /**
+ * Copy exactly N bytes from a file descriptor to a socket.
+ **/
+int io_sendfile(int fd, int sock, off_t off, size_t n);
+
+
+/**
  * Read exactly N bytes from the given file descriptor without affecting its
  * position.
  **/
