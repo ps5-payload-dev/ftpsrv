@@ -876,7 +876,9 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
   char argbuf[PATH_MAX + 1];
   char list_path[PATH_MAX + 1];
   char pathbuf[PATH_MAX * 3];
-  char outbuf[FTP_LIST_OUTBUF_SIZE];
+  char *outbuf = NULL;
+  size_t outcap = 0;
+  int free_outbuf = 0;
   char linebuf[1024];
   size_t out_len = 0;
   struct dirent *ent;
@@ -903,8 +905,27 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
+  outbuf = env->xfer_buf;
+  outcap = env->xfer_buf_size;
+  if (!outbuf || !outcap)
+  {
+    outcap = FTP_LIST_OUTBUF_SIZE;
+    outbuf = malloc(outcap);
+    free_outbuf = 1;
+    if (!outbuf)
+    {
+      int err = ftp_perror(env);
+      closedir(dir);
+      return err;
+    }
+  }
+
   if (ftp_data_open(env))
   {
+    if (free_outbuf)
+    {
+      free(outbuf);
+    }
     closedir(dir);
     return ftp_perror(env);
   }
@@ -994,9 +1015,9 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
       line_len = (int)sizeof(linebuf) - 1;
     }
 
-    if (out_len + (size_t)line_len > sizeof(outbuf))
+    if (out_len + (size_t)line_len > outcap)
     {
-      if (io_nwrite(env->data_fd, outbuf, out_len))
+      if (out_len && io_nwrite(env->data_fd, outbuf, out_len))
       {
         ret = ftp_perror(env);
         break;
@@ -1004,8 +1025,19 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
       out_len = 0;
     }
 
-    memcpy(outbuf + out_len, linebuf, (size_t)line_len);
-    out_len += (size_t)line_len;
+    if ((size_t)line_len > outcap)
+    {
+      if (io_nwrite(env->data_fd, linebuf, (size_t)line_len))
+      {
+        ret = ftp_perror(env);
+        break;
+      }
+    }
+    else
+    {
+      memcpy(outbuf + out_len, linebuf, (size_t)line_len);
+      out_len += (size_t)line_len;
+    }
   }
 
   if (!ret && out_len)
@@ -1036,9 +1068,17 @@ int ftp_cmd_LIST(ftp_env_t *env, const char *arg)
 
   if (ret)
   {
+    if (free_outbuf)
+    {
+      free(outbuf);
+    }
     return ret;
   }
 
+  if (free_outbuf)
+  {
+    free(outbuf);
+  }
   return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
 
@@ -1050,7 +1090,9 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
   const char *dir_path = NULL;
   char argbuf[PATH_MAX + 1];
   char list_path[PATH_MAX + 1];
-  char outbuf[FTP_LIST_OUTBUF_SIZE];
+  char *outbuf = NULL;
+  size_t outcap = 0;
+  int free_outbuf = 0;
   char linebuf[PATH_MAX + 4];
   size_t out_len = 0;
   struct dirent *ent;
@@ -1073,8 +1115,27 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
+  outbuf = env->xfer_buf;
+  outcap = env->xfer_buf_size;
+  if (!outbuf || !outcap)
+  {
+    outcap = FTP_LIST_OUTBUF_SIZE;
+    outbuf = malloc(outcap);
+    free_outbuf = 1;
+    if (!outbuf)
+    {
+      int err = ftp_perror(env);
+      closedir(dir);
+      return err;
+    }
+  }
+
   if (ftp_data_open(env))
   {
+    if (free_outbuf)
+    {
+      free(outbuf);
+    }
     closedir(dir);
     return ftp_perror(env);
   }
@@ -1093,9 +1154,9 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
       line_len = (int)sizeof(linebuf) - 1;
     }
 
-    if (out_len + (size_t)line_len > sizeof(outbuf))
+    if (out_len + (size_t)line_len > outcap)
     {
-      if (io_nwrite(env->data_fd, outbuf, out_len))
+      if (out_len && io_nwrite(env->data_fd, outbuf, out_len))
       {
         ret = ftp_perror(env);
         break;
@@ -1103,8 +1164,19 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
       out_len = 0;
     }
 
-    memcpy(outbuf + out_len, linebuf, (size_t)line_len);
-    out_len += (size_t)line_len;
+    if ((size_t)line_len > outcap)
+    {
+      if (io_nwrite(env->data_fd, linebuf, (size_t)line_len))
+      {
+        ret = ftp_perror(env);
+        break;
+      }
+    }
+    else
+    {
+      memcpy(outbuf + out_len, linebuf, (size_t)line_len);
+      out_len += (size_t)line_len;
+    }
   }
 
   if (!ret && out_len)
@@ -1135,9 +1207,17 @@ int ftp_cmd_NLST(ftp_env_t *env, const char *arg)
 
   if (ret)
   {
+    if (free_outbuf)
+    {
+      free(outbuf);
+    }
     return ret;
   }
 
+  if (free_outbuf)
+  {
+    free(outbuf);
+  }
   return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
 
@@ -1150,7 +1230,9 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
   char argbuf[PATH_MAX + 1];
   char list_path[PATH_MAX + 1];
   char pathbuf[PATH_MAX * 3];
-  char outbuf[FTP_LIST_OUTBUF_SIZE];
+  char *outbuf = NULL;
+  size_t outcap = 0;
+  int free_outbuf = 0;
   char linebuf[PATH_MAX + 64];
   size_t out_len = 0;
   struct dirent *ent;
@@ -1174,8 +1256,27 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
     return ftp_perror(env);
   }
 
+  outbuf = env->xfer_buf;
+  outcap = env->xfer_buf_size;
+  if (!outbuf || !outcap)
+  {
+    outcap = FTP_LIST_OUTBUF_SIZE;
+    outbuf = malloc(outcap);
+    free_outbuf = 1;
+    if (!outbuf)
+    {
+      int err = ftp_perror(env);
+      closedir(dir);
+      return err;
+    }
+  }
+
   if (ftp_data_open(env))
   {
+    if (free_outbuf)
+    {
+      free(outbuf);
+    }
     closedir(dir);
     return ftp_perror(env);
   }
@@ -1286,9 +1387,9 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
       line_len = (int)sizeof(linebuf) - 1;
     }
 
-    if (out_len + (size_t)line_len > sizeof(outbuf))
+    if (out_len + (size_t)line_len > outcap)
     {
-      if (io_nwrite(env->data_fd, outbuf, out_len))
+      if (out_len && io_nwrite(env->data_fd, outbuf, out_len))
       {
         ret = ftp_perror(env);
         break;
@@ -1296,8 +1397,19 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
       out_len = 0;
     }
 
-    memcpy(outbuf + out_len, linebuf, (size_t)line_len);
-    out_len += (size_t)line_len;
+    if ((size_t)line_len > outcap)
+    {
+      if (io_nwrite(env->data_fd, linebuf, (size_t)line_len))
+      {
+        ret = ftp_perror(env);
+        break;
+      }
+    }
+    else
+    {
+      memcpy(outbuf + out_len, linebuf, (size_t)line_len);
+      out_len += (size_t)line_len;
+    }
   }
 
   if (!ret && out_len)
@@ -1328,9 +1440,17 @@ int ftp_cmd_MLSD(ftp_env_t *env, const char *arg)
 
   if (ret)
   {
+    if (free_outbuf)
+    {
+      free(outbuf);
+    }
     return ret;
   }
 
+  if (free_outbuf)
+  {
+    free(outbuf);
+  }
   return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
 
