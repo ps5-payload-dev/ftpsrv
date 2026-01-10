@@ -354,7 +354,7 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   const char *p = env->cwd;
-  char pathbuf[PATH_MAX];
+  char pathbuf[PATH_MAX*3];
   struct dirent *ent;
   struct stat statbuf;
   char timebuf[20];
