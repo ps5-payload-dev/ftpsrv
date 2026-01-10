@@ -2027,7 +2027,7 @@ int ftp_cmd_STOR(ftp_env_t *env, const char *arg)
   ftp_abspath(env, pathbuf, arg);
   if (off == 0)
   {
-    flags |= O_CREAT;
+    flags |= O_CREAT | O_TRUNC;
   }
 
   if ((fd = open(pathbuf, flags, 0777)) < 0)
