@@ -49,6 +49,10 @@ io_sendfile(int fd, int s, off_t offset, size_t n) {
       continue;
     }
 
+    if (errno == EINTR) {
+        continue;
+    }
+
     if (errno == EAGAIN
 #ifdef EWOULDBLOCK
         || errno == EWOULDBLOCK
