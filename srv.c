@@ -21,6 +21,7 @@ along with this program; see the file COPYING. If not, see
 #include <arpa/inet.h>
 #include <errno.h>
 #include <ifaddrs.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -202,6 +203,7 @@ ftp_thread(void *args) {
   bool running;
   char *line;
   char* cmd;
+  int opt;
 
   env.data_fd     = -1;
   env.passive_fd  = -1;
@@ -214,6 +216,11 @@ ftp_thread(void *args) {
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));
   memset(&env.data_addr, 0, sizeof(env.data_addr));
+
+  opt = 1;
+  if(setsockopt(env.active_fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt))) {
+    FTP_LOG_PERROR("setsockopt");
+  }
 
   env.readbuf_size = IO_COPY_BUFSIZE;
   if(!(env.readbuf=malloc(env.readbuf_size))) {
