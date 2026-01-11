@@ -105,7 +105,7 @@ static ftp_command_t commands[] = {
   {"CHMOD", ftp_cmd_CHMOD},
 
   // duplicates that ensure commands are 4 bytes long
-  {"XCUP", ftp_cmd_CWD},
+  {"XCUP", ftp_cmd_CDUP},
   {"XMKD", ftp_cmd_MKD},
   {"XPWD", ftp_cmd_PWD},
   {"XRMD", ftp_cmd_RMD},
@@ -326,6 +326,7 @@ ftp_thread(void *args) {
 
   env.type        = 'I';
   env.data_offset = 0;
+  env.data_offset_is_rest = 0;
   env.self2elf    = 0;
   env.self_verify = 1;
 

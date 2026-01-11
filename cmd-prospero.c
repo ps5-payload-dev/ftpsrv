@@ -67,7 +67,7 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "226 /system and /system_ex remounted\r\n");
+  return ftp_active_printf(env, "200 /system and /system_ex remounted\r\n");
 }
 
 

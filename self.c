@@ -195,7 +195,7 @@ self_get_elfsize(const char* path) {
   int fd;
 
   if((fd=open(path, O_RDONLY, 0)) < 0) {
-    return -1;
+    return 0;
   }
 
   size = self_get_elfsize_fd(fd);
