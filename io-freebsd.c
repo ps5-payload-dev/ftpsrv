@@ -34,14 +34,15 @@ io_sendfile(int fd, int s, off_t offset, size_t n) {
 
     off_t sbytes = 0;
 
-    int rc = sendfile(fd, s, offset, nbytes, NULL, &sbytes, 0); // may be SF_NOCACHE?
-    if (sbytes > 0) {
-        copied += (size_t)sbytes;
-        offset += sbytes;
-      }
-    
-    if (rc == 0) {
-      if (sbytes == 0) {
+    int rc = sendfile(fd, s, offset, nbytes, NULL, &sbytes,
+                      0);  // may be SF_NOCACHE?
+    if(sbytes > 0) {
+      copied += (size_t)sbytes;
+      offset += sbytes;
+    }
+
+    if(rc == 0) {
+      if(sbytes == 0) {
         // no progress and successful (EOF/truncate)?
         errno = EIO;
         return -1;
@@ -49,27 +50,28 @@ io_sendfile(int fd, int s, off_t offset, size_t n) {
       continue;
     }
 
-    if (errno == EINTR) {
-        continue;
+    if(errno == EINTR) {
+      continue;
     }
 
-    if (errno == EAGAIN
+    if(errno == EAGAIN
 #ifdef EWOULDBLOCK
-        || errno == EWOULDBLOCK
+       || errno == EWOULDBLOCK
 #endif
 #ifdef ETIMEDOUT
-        || errno == ETIMEDOUT
+       || errno == ETIMEDOUT
 #endif
     ) {
-        // was progress, try again
-        if (sbytes > 0) {
-            continue;
-        }
-        // no progess?
-        return -1;
+      // was progress, try again
+      if(sbytes > 0) {
+        continue;
+      }
+      // no progess?
+      return -1;
     }
-    return -1; 
+    return -1;
   }
+
   return 0;
 }
 

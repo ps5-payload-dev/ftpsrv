@@ -43,7 +43,7 @@ io_nread(int fd, void* buf, size_t n) {
     ssize_t r = read(fd, (char*)buf + off, n - off);
     if(r < 0) {
       if(errno == EINTR) {
-	continue;
+        continue;
       }
       return -1;
     }
@@ -66,7 +66,7 @@ io_nwrite(int fd, const void* buf, size_t n) {
     ssize_t r = write(fd, (const char*)buf + off, n - off);
     if(r < 0) {
       if(errno == EINTR) {
-	continue;
+        continue;
       }
       return -1;
     }
@@ -122,7 +122,7 @@ io_pread(int fd, void* buf, size_t n, off_t off) {
     ssize_t r = pread(fd, (char*)buf + done, n - done, off + (off_t)done);
     if(r < 0) {
       if(errno == EINTR) {
-	continue;
+        continue;
       }
       return -1;
     }
@@ -142,10 +142,11 @@ io_pwrite(int fd, const void* buf, size_t n, off_t off) {
   size_t done = 0;
 
   while(done < n) {
-    ssize_t r = pwrite(fd, (const char*)buf + done, n - done, off + (off_t)done);
+    ssize_t r = pwrite(fd, (const char*)buf + done, n - done,
+                       off + (off_t)done);
     if(r < 0) {
       if(errno == EINTR) {
-	continue;
+        continue;
       }
       return -1;
     }
@@ -194,9 +195,8 @@ io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t size) {
   return 0;
 }
 
-
 int
-io_ncopy_buf(int fd_in, int fd_out, size_t size, void *buf, size_t bufsize) {
+io_ncopy_buf(int fd_in, int fd_out, size_t size, void* buf, size_t bufsize) {
   size_t copied = 0;
   ssize_t n;
 
@@ -224,7 +224,6 @@ io_ncopy_buf(int fd_in, int fd_out, size_t size, void *buf, size_t bufsize) {
   return 0;
 }
 
-
 int
 io_set_socket_opts(int fd, int is_data) {
   int rc = 0;
@@ -238,17 +237,14 @@ io_set_socket_opts(int fd, int is_data) {
   }
 
   int timeout_sec = is_data ? FTP_DATA_TIMEOUT_SEC : FTP_CTRL_TIMEOUT_SEC;
-  if (timeout_sec > 0)
-  {
+  if(timeout_sec > 0) {
     struct timeval tv;
     memset(&tv, 0, sizeof(tv));
     tv.tv_sec = timeout_sec;
-    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0)
-    {
+    if(setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
       rc = -1;
     }
-    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
-    {
+    if(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
       rc = -1;
     }
   }

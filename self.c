@@ -72,7 +72,7 @@ decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
  **/
 static int
 copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
-	     size_t size) {
+             size_t size) {
   return io_pcopy(from_fd, to_fd, from_start, to_start, size);
 }
 
@@ -302,7 +302,7 @@ self_extract_elf_ex(int self_fd, int elf_fd, int verify) {
     // PT_SCE_VERSION segment is appended at the end of the SELF file
     if(phdr.p_type == 0x6fffff01) {
       if(copy_segment(self_fd, head.file_size, elf_fd, phdr.p_offset,
-		      phdr.p_filesz)) {
+                      phdr.p_filesz)) {
 #if 0 // Some FSELFs are missing the version data, ignore error
 	free(entries);
 	return -1;
@@ -316,8 +316,8 @@ self_extract_elf_ex(int self_fd, int elf_fd, int verify) {
     for(int j=0; j<head.num_entries; j++) {
       if(entries[j].props.segment_index == i &&
 	 entries[j].props.has_blocks) {
-	entry = &entries[j];
-	break;
+        entry = &entries[j];
+        break;
       }
     }
     if(!entry) {
@@ -327,11 +327,11 @@ self_extract_elf_ex(int self_fd, int elf_fd, int verify) {
     // Decrypt and/or copy the segment
     if(entry->props.is_encrypted || entry->props.is_compressed) {
       if(decrypt_segment(self_fd, elf_fd, &phdr, i)) {
-	free(entries);
-	return -1;
+        free(entries);
+        return -1;
       }
     } else if(copy_segment(self_fd, entry->offset, elf_fd, phdr.p_offset,
-			   phdr.p_filesz)) {
+                           phdr.p_filesz)) {
       free(entries);
       return -1;
     }
@@ -378,22 +378,22 @@ self_extract_elf(int self_fd, int elf_fd) {
   return self_extract_elf_ex(self_fd, elf_fd, 1);
 }
 
-
 size_t
 self_is_valid(const char* path) {
-  const char *dot = strrchr(path, '.');
-  
-  if (!dot){
+  const char* dot = strrchr(path, '.');
+
+  if(!dot) {
     return 0;
   }
 
-  if (!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf") || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx") || ftp_strieq(dot, ".self"))) {
+  if(!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf")
+       || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx")
+       || ftp_strieq(dot, ".self"))) {
     return 0;
   }
 
   return self_get_elfsize(path);
 }
-
 
 /*
   Local Variables:

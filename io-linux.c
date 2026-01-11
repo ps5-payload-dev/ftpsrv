@@ -35,11 +35,10 @@ io_sendfile(int in_fd, int out_fd, off_t offset, size_t n) {
 
     if((r=sendfile(out_fd, in_fd, &offset, count)) < 0) {
       if(errno == EINTR) {
-	      continue;
+        continue;
       }
       return -1;
     }
-    
     if(r == 0) {
       errno = EPIPE;
       return -1;
