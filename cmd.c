@@ -19,6 +19,7 @@ along with this program; see the file COPYING. If not, see
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -31,7 +32,6 @@ along with this program; see the file COPYING. If not, see
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 #include "cmd.h"
 #include "io.h"
@@ -278,7 +278,6 @@ ftp_copy_ascii_out(ftp_env_t *env, int fd_in) {
           continue;
         }
         outbuf[out_len++] = '\r';
-        outbuf[out_len++] = '\0';
         prev_cr = 0;
       }
 
@@ -301,8 +300,7 @@ ftp_copy_ascii_out(ftp_env_t *env, int fd_in) {
 
   if(prev_cr) {
     outbuf[0] = '\r';
-    outbuf[1] = '\0';
-    if(io_nwrite(env->data_fd, outbuf, 2)) {
+    if(io_nwrite(env->data_fd, outbuf, 1)) {
       goto error;
     }
   }
@@ -372,24 +370,22 @@ ftp_copy_ascii_in(ftp_env_t *env, int fd_out, off_t *out_off) {
 
       if(prev_cr) {
         if(c == '\n') {
-          outbuf[out_len++] = '\n';
+          outbuf[out_len++] = '\n'; // \r\n -> \n
           prev_cr = 0;
           continue;
         }
-        if(c == '\0') {
-          outbuf[out_len++] = '\r';
-          prev_cr = 0;
-          continue;
+        // Emit the swallowed \r
+        if(out_len < outcap) {
+          outbuf[out_len++] = '\r'; 
         }
-        outbuf[out_len++] = '\r';
         prev_cr = 0;
       }
 
       if(c == '\r') {
         prev_cr = 1;
-        continue;
+        continue; // Swallow \r
       }
-      outbuf[out_len++] = (char)c;
+      if(out_len < outcap) outbuf[out_len++] = (char)c;
     }
 
     if(out_len && io_nwrite(fd_out, outbuf, out_len)) {
@@ -434,6 +430,7 @@ ftp_data_close(ftp_env_t *env) {
     env->data_fd = -1;
     return 0;
   }
+  env->data_fd = -1; // Force reset even on error to prevent double close
   return -1;
 }
 
@@ -444,12 +441,20 @@ ftp_data_close(ftp_env_t *env) {
 int
 ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
   char buf[0x1000];
-  size_t len = 0;
   va_list args;
 
   va_start(args, fmt);
-  len = vsnprintf(buf, sizeof(buf), fmt, args);
+  int n = vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
+
+  if(n < 0) {
+    return -1;
+  }
+
+  size_t len = (size_t)n;
+  if(len >= sizeof(buf)) {
+    len = sizeof(buf) - 1;
+  }
 
   if(io_nwrite(env->active_fd, buf, len)) {
     return -1;
@@ -618,6 +623,42 @@ ftp_format_mdtm(time_t t, char *buf, size_t bufsize) {
   return 0;
 }
 
+static int
+ftp_format_list_time(time_t t, char *buf, size_t bufsize) {
+  struct tm tm;
+  time_t now;
+
+  // LIST output is typically server-local time (unlike MLSD's UTC "modify"). 
+  static const char *mon[] = {"Jan","Feb","Mar","Apr","May","Jun",
+                              "Jul","Aug","Sep","Oct","Nov","Dec"};
+
+  if(!buf || bufsize < 14) {
+    return -1;
+  }
+
+  if(!localtime_r(&t, &tm)) {
+    // Fallback to a fixed epoch-ish timestamp rather than garbage. 
+    (void)snprintf(buf, bufsize, "Jan  1  1970");
+    return 0;
+  }
+
+  now = time(NULL);
+  long long diff = (long long)now - (long long)t;
+  const long long six_months = 180LL * 24LL * 60LL * 60LL;
+  const char *mname = mon[(tm.tm_mon >= 0 && tm.tm_mon < 12) ? tm.tm_mon : 0];
+
+  if(diff < 0 || diff > six_months) {
+    // Older timestamps: show year like "ls -l".
+    (void)snprintf(buf, bufsize, "%s %2d  %4d", mname, tm.tm_mday, tm.tm_year + 1900);
+  } else {
+    // Recent timestamps: show time.
+    (void)snprintf(buf, bufsize, "%s %2d %02d:%02d", mname, tm.tm_mday, tm.tm_hour, tm.tm_min);
+  }
+
+  return 0;
+}
+
+
 /**
  * Enter passive mode.
  **/
@@ -683,14 +724,12 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
     return ret;
   }
   port = sockaddr.sin_port;
+  uint32_t ip = ntohl(addr);
+  uint16_t p  = ntohs(port);
 
   return ftp_active_printf(env, "227 Entering Passive Mode (%hhu,%hhu,%hhu,%hhu,%hhu,%hhu).\r\n",
-			   (addr >> 0) & 0xFF,
-			   (addr >> 8) & 0xFF,
-			   (addr >> 16) & 0xFF,
-			   (addr >> 24) & 0xFF,
-			   (port >> 0) & 0xFF,
-			   (port >> 8) & 0xFF);
+    (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, (ip >> 0) & 0xFF,
+    (p >> 8) & 0xFF, (p >> 0) & 0xFF);
 }
 
 
@@ -842,90 +881,295 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "226 File deleted\r\n");
+  return ftp_active_printf(env, "250 File deleted\r\n");
+}
+
+
+
+/**
+ * Buffered data-transfer helpers for directory listings.
+ *
+ * These reduce copy/paste between LIST/NLST/MLSD and centralize flush/error handling.
+ **/
+typedef struct ftp_xfer_buf {
+  ftp_env_t *env;
+  char *buf;
+  size_t cap;
+  size_t len;
+  int free_buf;
+  int failed;
+} ftp_xfer_buf_t;
+
+static void
+ftp_xfer_buf_release(ftp_xfer_buf_t *x) {
+  if(x->free_buf && x->buf) {
+    free(x->buf);
+  }
+  x->buf = NULL;
+  x->cap = 0;
+  x->len = 0;
+  x->free_buf = 0;
+}
+
+static int
+ftp_xfer_write_raw(ftp_xfer_buf_t *x, const void *data, size_t len) {
+  if(x->failed) {
+    return -1;
+  }
+  if(io_nwrite(x->env->data_fd, data, len)) {
+    (void)ftp_data_xfer_error_reply(x->env);
+    x->failed = 1;
+    return -1;
+  }
+  return 0;
+}
+
+static int
+ftp_xfer_flush(ftp_xfer_buf_t *x) {
+  if(x->failed) {
+    return -1;
+  }
+  if(x->len) {
+    if(ftp_xfer_write_raw(x, x->buf, x->len)) {
+      return -1;
+    }
+    x->len = 0;
+  }
+  return 0;
+}
+
+static int
+ftp_xfer_vprintf(ftp_xfer_buf_t *x, const char *fmt, va_list ap) {
+  for(;;) {
+    size_t rem;
+
+    if(x->failed) {
+      return -1;
+    }
+
+    rem = x->cap - x->len;
+
+    va_list aq;
+    va_copy(aq, ap);
+    int n = vsnprintf(x->buf + x->len, rem, fmt, aq);
+    va_end(aq);
+
+    if(n < 0) {
+      // Formatting error; let caller decide whether to skip entry.
+      return -1;
+    }
+
+    if((size_t)n < rem) {
+      x->len += (size_t)n;
+      return 0;
+    }
+
+    // Not enough space -> flush and try again. 
+    if(ftp_xfer_flush(x)) {
+      return -1;
+    }
+
+    // If a single line is larger than the buffer, format into a temp string and write directly. 
+    if((size_t)n >= x->cap) {
+      size_t need = (size_t)n + 1;
+      char *tmp = malloc(need);
+      if(!tmp) {
+        x->failed = 1;
+        return -1;
+      }
+
+      va_list ar;
+      va_copy(ar, ap);
+      int m = vsnprintf(tmp, need, fmt, ar);
+      va_end(ar);
+
+      if(m < 0) {
+        free(tmp);
+        return -1;
+      }
+
+      int wr = ftp_xfer_write_raw(x, tmp, (size_t)m);
+      free(tmp);
+      return wr;
+    }
+
+    // else: retry with empty buffer 
+  }
+}
+
+static int
+ftp_xfer_printf(ftp_xfer_buf_t *x, const char *fmt, ...) {
+  int rc;
+  va_list ap;
+  va_start(ap, fmt);
+  rc = ftp_xfer_vprintf(x, fmt, ap);
+  va_end(ap);
+  return rc;
 }
 
 
 /**
- * Trasfer a list of files and folder.
- **/
-int
-ftp_cmd_LIST(ftp_env_t *env, const char *arg) {
-  const char *dir_path = NULL;
-  char argbuf[PATH_MAX + 1];
-  char list_path[PATH_MAX + 1];
-  char pathbuf[PATH_MAX*3];
-  char *outbuf = NULL;
-  size_t outcap = 0;
-  int free_outbuf = 0;
-  char linebuf[1024];
-  size_t out_len = 0;
-  struct dirent *ent;
-  struct stat statbuf;
-  char timebuf[20];
-  char modebuf[20];
-  struct tm tm;
-  DIR *dir;
-  int xfer_failed = 0;
-
-  dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
-  if(dir_path) {
-    ftp_abspath(env, list_path, dir_path);
-  } else {
-    ftp_normpath(env->cwd, list_path, sizeof(list_path));
-  }
-  dir_path = list_path;
-
-  if(!(dir=opendir(dir_path))) {
-    return ftp_perror(env);
-  }
-
-  outbuf = env->xfer_buf;
-  outcap = env->xfer_buf_size;
-  if(!outbuf || !outcap) {
-    outcap = FTP_LIST_OUTBUF_SIZE;
-    outbuf = malloc(outcap);
-    free_outbuf = 1;
-    if(!outbuf) {
+* Shared prologue/epilogue for LIST/NLST/MLSD 
+**/
+static int
+ftp_list_xfer_start(ftp_env_t *env, DIR *dir, ftp_xfer_buf_t *x) {
+  memset(x, 0, sizeof(*x));
+  x->env = env;
+  x->buf = env->xfer_buf;
+  x->cap = env->xfer_buf_size;
+  if(!x->buf || !x->cap) {
+    x->cap = FTP_LIST_OUTBUF_SIZE;
+    x->buf = malloc(x->cap);
+    x->free_buf = 1;
+    if(!x->buf) {
       int err = ftp_perror(env);
       closedir(dir);
       return err;
     }
   }
 
+  if(ftp_active_printf(env, "150 Opening data transfer\r\n")) {
+    ftp_xfer_buf_release(x);
+    closedir(dir);
+    return -1;
+  }
   if(ftp_data_open(env)) {
     int err = ftp_data_open_error_reply(env);
-    if(free_outbuf) {
-      free(outbuf);
-    }
+    ftp_xfer_buf_release(x);
     closedir(dir);
     return err;
   }
 
-  ftp_active_printf(env, "150 Opening data transfer\r\n");
+  return 0;
+}
+
+static int
+ftp_list_xfer_finish(ftp_env_t *env, DIR *dir, ftp_xfer_buf_t *x) {
+  if(!x->failed) {
+    (void)ftp_xfer_flush(x);
+  }
+
+  if(ftp_data_close(env)) {
+    (void)ftp_perror(env);
+    x->failed = 1;
+  }
+
+  if(closedir(dir)) {
+    (void)ftp_perror(env);
+    x->failed = 1;
+  }
+
+  ftp_xfer_buf_release(x);
+
+  if(x->failed) {
+    return 0;
+  }
+  return ftp_active_printf(env, "226 Transfer complete\r\n");
+}
+
+
+static int
+ftp_join_path(char *dst, size_t dst_sz, const char *dir_path, const char *name) {
+  int n;
+
+  if(!dst || dst_sz < 2) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  if(dir_path[1] == '\0') {
+    n = snprintf(dst, dst_sz, "/%s", name);
+  } else {
+    n = snprintf(dst, dst_sz, "%s/%s", dir_path, name);
+  }
+
+  if(n < 0 || (size_t)n >= dst_sz) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  return 0;
+}
+
+/**
+ * Trasfer a list of files and folder.
+ **/
+int
+ftp_cmd_LIST(ftp_env_t *env, const char *arg) {
+  const char *dir_path = NULL;  
+  struct dirent *ent;
+  struct stat statbuf;
+  char timebuf[32];
+  char modebuf[20];
+  DIR *dir;
+  ftp_xfer_buf_t x;
+
+  // Allocate large buffers on Heap to avoid SceLibcInternalHeap error due to stack overflow
+  char *argbuf = malloc(PATH_MAX + 1);
+  char *list_path = malloc(PATH_MAX + 1);
+  char *pathbuf = malloc(PATH_MAX * 3);
+
+   if(!argbuf || !list_path || !pathbuf) {
+    if(argbuf)
+      free(argbuf);
+    if(list_path)
+      free(list_path);
+    if(pathbuf)
+      free(pathbuf);
+    return ftp_perror(env);
+  }
+
+
+  dir_path = ftp_list_path_arg(arg, argbuf, PATH_MAX + 1);
+  if(dir_path) {
+    ftp_abspath(env, list_path, dir_path);
+  } else {
+    ftp_normpath(env->cwd, list_path, PATH_MAX + 1);
+  }
+  dir_path = list_path;
+
+  if(!(dir = opendir(dir_path))) {
+    free(argbuf);
+    free(list_path);
+    free(pathbuf);
+    return ftp_perror(env);
+  }
+
+  int err = ftp_list_xfer_start(env, dir, &x);
+  if(err) {
+    free(argbuf);
+    free(list_path);
+    free(pathbuf);
+    return err; // start() already replied and closed DIR on error
+  }
+
 #if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
   int dir_fd = dirfd(dir);
 #endif
 
-  while((ent = readdir(dir))) {
+  int readdir_errno = 0;
+
+  for(;;) {
     int have_path = 0;
-    int stat_rc;
+    int stat_rc  = -1;
+
+    errno = 0;
+    ent = readdir(dir);
+    if(!ent) {
+      readdir_errno = errno;
+      break;
+    }
+
 
 #if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
     if(dir_fd >= 0) {
       stat_rc = fstatat(dir_fd, ent->d_name, &statbuf, AT_SYMLINK_NOFOLLOW);
-    } else {
-      stat_rc = -1;
-    }
-#else
-    stat_rc = -1;
+    } 
 #endif
 
     if(stat_rc != 0) {
-      if(dir_path[1] == '\0') {
-        snprintf(pathbuf, sizeof(pathbuf), "/%s", ent->d_name);
-      } else {
-        snprintf(pathbuf, sizeof(pathbuf), "%s/%s", dir_path, ent->d_name);
+      if(ftp_join_path(pathbuf, PATH_MAX * 3, dir_path, ent->d_name) != 0) {
+        continue;
       }
       have_path = 1;
 #ifdef AT_SYMLINK_NOFOLLOW
@@ -940,10 +1184,8 @@ ftp_cmd_LIST(ftp_env_t *env, const char *arg) {
 
     if(env->self2elf && S_ISREG(statbuf.st_mode)) {
       if(!have_path) {
-        if(dir_path[1] == '\0') {
-          snprintf(pathbuf, sizeof(pathbuf), "/%s", ent->d_name);
-        } else {
-          snprintf(pathbuf, sizeof(pathbuf), "%s/%s", dir_path, ent->d_name);
+        if(ftp_join_path(pathbuf, PATH_MAX * 3, dir_path, ent->d_name) != 0) {
+          continue;
         }
         have_path = 1;
       }
@@ -954,69 +1196,41 @@ ftp_cmd_LIST(ftp_env_t *env, const char *arg) {
     }
 
     ftp_mode_string(statbuf.st_mode, modebuf);
-    localtime_r((const time_t *)&(statbuf.st_mtime), &tm);
-    strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &tm);
-    int line_len = snprintf(linebuf, sizeof(linebuf),
-                            "%s %" PRIuMAX " %" PRIuMAX " %" PRIuMAX
-                            " %" PRIuMAX " %s %s\r\n",
-                            modebuf, (uintmax_t)statbuf.st_nlink,
-                            (uintmax_t)statbuf.st_uid,
-                            (uintmax_t)statbuf.st_gid,
-                            (uintmax_t)statbuf.st_size, timebuf, ent->d_name);
-    if(line_len < 0) {
+    if(ftp_format_list_time(statbuf.st_mtime, timebuf, sizeof(timebuf))) {
       continue;
     }
 
-    if((size_t)line_len >= sizeof(linebuf)) {
-      line_len = (int)sizeof(linebuf) - 1;
-    }
-
-    if(out_len + (size_t)line_len > outcap) {
-      if(out_len && io_nwrite(env->data_fd, outbuf, out_len)) {
-        (void)ftp_data_xfer_error_reply(env);
-        xfer_failed = 1;
+    if(ftp_xfer_printf(&x,
+                       "%s %" PRIuMAX " %" PRIuMAX " %" PRIuMAX
+                       " %" PRIuMAX " %s %s\r\n",
+                       modebuf, (uintmax_t)statbuf.st_nlink,
+                       (uintmax_t)statbuf.st_uid,
+                       (uintmax_t)statbuf.st_gid,
+                       (uintmax_t)statbuf.st_size, timebuf, ent->d_name)) {
+      if(x.failed) {
         break;
       }
-      out_len = 0;
+      // formatting error -> skip entry
+      continue;
     }
 
-    if((size_t)line_len > outcap) {
-      if(io_nwrite(env->data_fd, linebuf, (size_t)line_len)) {
-        (void)ftp_data_xfer_error_reply(env);
-        xfer_failed = 1;
-        break;
-      }
-    } else {
-      memcpy(outbuf + out_len, linebuf, (size_t)line_len);
-      out_len += (size_t)line_len;
+    if(x.failed) {
+      break;
     }
   }
 
-  if(!xfer_failed && out_len) {
-    if(io_nwrite(env->data_fd, outbuf, out_len)) {
-      (void)ftp_data_xfer_error_reply(env);
-      xfer_failed = 1;
-    }
-  }
-
-  if(ftp_data_close(env)) {
+  if(readdir_errno && !x.failed) {
+    errno = readdir_errno;
     (void)ftp_perror(env);
-    xfer_failed = 1;
+    x.failed = 1;
   }
 
-  if(closedir(dir)) {
-    (void)ftp_perror(env);
-    xfer_failed = 1;
-  }
-
-  if(free_outbuf) {
-    free(outbuf);
-  }
-  if(xfer_failed) {
-    return 0;
-  }
-  return ftp_active_printf(env, "226 Transfer complete\r\n");
+  free(argbuf);
+  free(list_path);
+  free(pathbuf);
+  return ftp_list_xfer_finish(env, dir, &x);
 }
+
 
 /**
  * Transfer a list of file names (no stat).
@@ -1024,189 +1238,155 @@ ftp_cmd_LIST(ftp_env_t *env, const char *arg) {
 int
 ftp_cmd_NLST(ftp_env_t *env, const char *arg) {
   const char *dir_path = NULL;
-  char argbuf[PATH_MAX + 1];
-  char list_path[PATH_MAX + 1];
-  char *outbuf = NULL;
-  size_t outcap = 0;
-  int free_outbuf = 0;
-  char linebuf[PATH_MAX + 4];
-  size_t out_len = 0;
   struct dirent *ent;
   DIR *dir;
-  int xfer_failed = 0;
+  ftp_xfer_buf_t x;
+  char *argbuf = malloc(PATH_MAX + 1);
+  char *list_path = malloc(PATH_MAX + 1);
 
-  dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
+   if(!argbuf || !list_path) {
+    if(argbuf)
+      free(argbuf);
+    if(list_path)
+      free(list_path);
+    return ftp_perror(env);
+  }
+
+  dir_path = ftp_list_path_arg(arg, argbuf, PATH_MAX + 1);
   if(dir_path) {
     ftp_abspath(env, list_path, dir_path);
   } else {
-    ftp_normpath(env->cwd, list_path, sizeof(list_path));
+    ftp_normpath(env->cwd, list_path, PATH_MAX + 1);
   }
   dir_path = list_path;
 
   if(!(dir = opendir(dir_path))) {
+    free(argbuf);
+    free(list_path);
     return ftp_perror(env);
   }
 
-  outbuf = env->xfer_buf;
-  outcap = env->xfer_buf_size;
-  if(!outbuf || !outcap) {
-    outcap = FTP_LIST_OUTBUF_SIZE;
-    outbuf = malloc(outcap);
-    free_outbuf = 1;
-    if(!outbuf) {
-      int err = ftp_perror(env);
-      closedir(dir);
-      return err;
-    }
+  int err = ftp_list_xfer_start(env, dir, &x);
+  if(err) {
+    free(argbuf);
+    free(list_path);
+    return err; // start() already replied and closed DIR on error 
   }
 
-  if(ftp_data_open(env)) {
-    int err = ftp_data_open_error_reply(env);
-    if(free_outbuf) {
-      free(outbuf);
+  int readdir_errno = 0;
+
+  for(;;) {
+    errno = 0;
+    ent = readdir(dir);
+    if(!ent) {
+      readdir_errno = errno;
+      break;
     }
-    closedir(dir);
-    return err;
-  }
 
-  ftp_active_printf(env, "150 Opening data transfer\r\n");
-
-  while((ent = readdir(dir))) {
-    int line_len = snprintf(linebuf, sizeof(linebuf), "%s\r\n", ent->d_name);
-    if(line_len < 0) {
+    if(ftp_xfer_printf(&x, "%s\r\n", ent->d_name)) {
+      if(x.failed) {
+        break;
+      }
+      // shouldn't happen; but if it does, skip entry 
       continue;
     }
-    if((size_t)line_len >= sizeof(linebuf)) {
-      line_len = (int)sizeof(linebuf) - 1;
-    }
 
-    if(out_len + (size_t)line_len > outcap) {
-      if(out_len && io_nwrite(env->data_fd, outbuf, out_len)) {
-        (void)ftp_data_xfer_error_reply(env);
-        xfer_failed = 1;
-        break;
-      }
-      out_len = 0;
-    }
-
-    if((size_t)line_len > outcap) {
-      if(io_nwrite(env->data_fd, linebuf, (size_t)line_len)) {
-        (void)ftp_data_xfer_error_reply(env);
-        xfer_failed = 1;
-        break;
-      }
-    } else {
-      memcpy(outbuf + out_len, linebuf, (size_t)line_len);
-      out_len += (size_t)line_len;
+    if(x.failed) {
+      break;
     }
   }
 
-  if(!xfer_failed && out_len) {
-    if(io_nwrite(env->data_fd, outbuf, out_len)) {
-      (void)ftp_data_xfer_error_reply(env);
-      xfer_failed = 1;
-    }
-  }
-
-  if(ftp_data_close(env)) {
+  if(readdir_errno && !x.failed) {
+    errno = readdir_errno;
     (void)ftp_perror(env);
-    xfer_failed = 1;
+    x.failed = 1;
   }
-
-  if(closedir(dir)) {
-    (void)ftp_perror(env);
-    xfer_failed = 1;
-  }
-
-  if(free_outbuf) {
-    free(outbuf);
-  }
-  if(xfer_failed) {
-    return 0;
-  }
-  return ftp_active_printf(env, "226 Transfer complete\r\n");
+  
+  free(argbuf);
+  free(list_path);
+  return ftp_list_xfer_finish(env, dir, &x);
 }
 
+
 /**
- * Transfer a machine-readable list without stat/strftime.
+ * Transfer a machine-readable list.
  **/
 int
 ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
   const char *dir_path = NULL;
-  char argbuf[PATH_MAX + 1];
-  char list_path[PATH_MAX + 1];
-  char pathbuf[PATH_MAX * 3];
-  char *outbuf = NULL;
-  size_t outcap = 0;
-  int free_outbuf = 0;
-  char linebuf[PATH_MAX + 64];
-  size_t out_len = 0;
   struct dirent *ent;
   struct stat statbuf;
   DIR *dir;
-  int xfer_failed = 0;
+  ftp_xfer_buf_t x;
 
-  dir_path = ftp_list_path_arg(arg, argbuf, sizeof(argbuf));
+  // Allocate large buffers on Heap to avoid SceLibcInternalHeap error due to stack overflow
+  char *argbuf = malloc(PATH_MAX + 1);
+  char *list_path = malloc(PATH_MAX + 1);
+  char *pathbuf = malloc(PATH_MAX * 3);
+
+   if(!argbuf || !list_path || !pathbuf) {
+    if(argbuf)
+      free(argbuf);
+    if(list_path)
+      free(list_path);
+    if(pathbuf)
+      free(pathbuf);
+    return ftp_perror(env);
+  }
+
+
+  dir_path = ftp_list_path_arg(arg, argbuf, PATH_MAX + 1);
   if(dir_path) {
     ftp_abspath(env, list_path, dir_path);
   } else {
-    ftp_normpath(env->cwd, list_path, sizeof(list_path));
+    ftp_normpath(env->cwd, list_path, PATH_MAX + 1);
   }
   dir_path = list_path;
 
   if(!(dir = opendir(dir_path))) {
+    free(argbuf);
+    free(list_path);
+    free(pathbuf);
     return ftp_perror(env);
   }
 
-  outbuf = env->xfer_buf;
-  outcap = env->xfer_buf_size;
-  if(!outbuf || !outcap) {
-    outcap = FTP_LIST_OUTBUF_SIZE;
-    outbuf = malloc(outcap);
-    free_outbuf = 1;
-    if(!outbuf) {
-      int err = ftp_perror(env);
-      closedir(dir);
-      return err;
-    }
+  int err = ftp_list_xfer_start(env, dir, &x);
+  if(err) {
+    free(argbuf);
+    free(list_path);
+    free(pathbuf);
+    return err; // start() already replied and closed DIR on error
   }
 
-  if(ftp_data_open(env)) {
-    int err = ftp_data_open_error_reply(env);
-    if(free_outbuf) {
-      free(outbuf);
-    }
-    closedir(dir);
-    return err;
-  }
-
-  ftp_active_printf(env, "150 Opening data transfer\r\n");
 #if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
   int dir_fd = dirfd(dir);
 #endif
 
-  while((ent = readdir(dir))) {
+  int readdir_errno = 0;
+
+  for(;;) {
     int have_path = 0;
-    int stat_rc;
-    const char *type = "type=unknown;";
-    uintmax_t size = 0;
+    int stat_rc  = -1;
+    const char *type;
+    uintmax_t size;
     char timebuf[32];
+
+    errno = 0;
+    ent = readdir(dir);
+    if(!ent) {
+      readdir_errno = errno;
+      break;
+    }
 
 #if defined(AT_SYMLINK_NOFOLLOW) && !defined(__ORBIS__)
     if(dir_fd >= 0) {
       stat_rc = fstatat(dir_fd, ent->d_name, &statbuf, AT_SYMLINK_NOFOLLOW);
-    } else {
-      stat_rc = -1;
-    }
-#else
-    stat_rc = -1;
+    } 
 #endif
 
     if(stat_rc != 0) {
-      if(dir_path[1] == '\0') {
-        snprintf(pathbuf, sizeof(pathbuf), "/%s", ent->d_name);
-      } else {
-        snprintf(pathbuf, sizeof(pathbuf), "%s/%s", dir_path, ent->d_name);
+      if(ftp_join_path(pathbuf, PATH_MAX * 3, dir_path, ent->d_name) != 0) {
+        continue;
       }
       have_path = 1;
 #ifdef AT_SYMLINK_NOFOLLOW
@@ -1229,16 +1409,24 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
     } else if(S_ISREG(statbuf.st_mode)) {
       type = "type=file;";
     } else if(S_ISLNK(statbuf.st_mode)) {
-      type = "type=link;";
+      type = "type=OS.unix=symlink;";
+    } else if(S_ISCHR(statbuf.st_mode)) {
+      type = "type=OS.unix=chardev;";
+    } else if(S_ISBLK(statbuf.st_mode)) {
+      type = "type=OS.unix=blockdev;";
+    } else if(S_ISFIFO(statbuf.st_mode)) {
+      type = "type=OS.unix=fifo;";
+    } else if(S_ISSOCK(statbuf.st_mode)) {
+      type = "type=OS.unix=sock;";
+    } else {
+      type = "type=unknown;";
     }
 
     size = (uintmax_t)statbuf.st_size;
     if(env->self2elf && S_ISREG(statbuf.st_mode)) {
       if(!have_path) {
-        if(dir_path[1] == '\0') {
-          snprintf(pathbuf, sizeof(pathbuf), "/%s", ent->d_name);
-        } else {
-          snprintf(pathbuf, sizeof(pathbuf), "%s/%s", dir_path, ent->d_name);
+        if(ftp_join_path(pathbuf,  PATH_MAX * 3, dir_path, ent->d_name) != 0) {
+          continue;
         }
         have_path = 1;
       }
@@ -1252,62 +1440,32 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
       continue;
     }
 
-    int line_len = snprintf(linebuf, sizeof(linebuf),
-                            "%ssize=%" PRIuMAX ";modify=%s; %s\r\n", type, size,
-                            timebuf, ent->d_name);
-    if(line_len < 0) {
+    if(ftp_xfer_printf(&x,
+                       "%ssize=%" PRIuMAX ";modify=%s; %s\r\n",
+                       type, size, timebuf, ent->d_name)) {
+      if(x.failed) {
+        break;
+      }
       continue;
     }
-    if((size_t)line_len >= sizeof(linebuf)) {
-      line_len = (int)sizeof(linebuf) - 1;
-    }
 
-    if(out_len + (size_t)line_len > outcap) {
-      if(out_len && io_nwrite(env->data_fd, outbuf, out_len)) {
-        (void)ftp_data_xfer_error_reply(env);
-        xfer_failed = 1;
-        break;
-      }
-      out_len = 0;
-    }
-
-    if((size_t)line_len > outcap) {
-      if(io_nwrite(env->data_fd, linebuf, (size_t)line_len)) {
-        (void)ftp_data_xfer_error_reply(env);
-        xfer_failed = 1;
-        break;
-      }
-    } else {
-      memcpy(outbuf + out_len, linebuf, (size_t)line_len);
-      out_len += (size_t)line_len;
+    if(x.failed) {
+      break;
     }
   }
 
-  if(!xfer_failed && out_len) {
-    if(io_nwrite(env->data_fd, outbuf, out_len)) {
-      (void)ftp_data_xfer_error_reply(env);
-      xfer_failed = 1;
-    }
-  }
-
-  if(ftp_data_close(env)) {
+  if(readdir_errno && !x.failed) {
+    errno = readdir_errno;
     (void)ftp_perror(env);
-    xfer_failed = 1;
+    x.failed = 1;
   }
-
-  if(closedir(dir)) {
-    (void)ftp_perror(env);
-    xfer_failed = 1;
-  }
-
-  if(free_outbuf) {
-    free(outbuf);
-  }
-  if(xfer_failed) {
-    return 0;
-  }
-  return ftp_active_printf(env, "226 Transfer complete\r\n");
+  
+  free(argbuf);
+  free(list_path);
+  free(pathbuf);
+  return ftp_list_xfer_finish(env, dir, &x);
 }
+
 
 /**
  * Create a new directory at a given path.
@@ -1325,7 +1483,7 @@ ftp_cmd_MKD(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "226 Directory created\r\n");
+  return ftp_active_printf(env, "257 Directory created\r\n");
 }
 
 
@@ -1447,14 +1605,11 @@ ftp_cmd_EPRT(ftp_env_t *env, const char *arg) {
   memset(&ctrl_addr, 0, sizeof(ctrl_addr));
   ctrl_len = sizeof(ctrl_addr);
   if(getpeername(env->active_fd, (struct sockaddr *)&ctrl_addr, &ctrl_len) !=
-     0) {
-    return ftp_active_printf(env, "500 Illegal EPRT command\r\n");
-  }
-  if(ctrl_addr.sin_family != AF_INET ||
+     0 || ctrl_addr.sin_family != AF_INET ||
      ctrl_addr.sin_addr.s_addr != in_addr.s_addr) {
     return ftp_active_printf(env, "500 Illegal EPRT command\r\n");
   }
-
+  
   port_ul = strtoul(portbuf, NULL, 10);
   if(!port_ul || port_ul > 65535) {
     return ftp_active_printf(
@@ -1515,6 +1670,7 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 
   if(env->type == 'A') {
     env->data_offset = 0;
+    env->data_offset_is_rest = 0;
     return ftp_active_printf(env, "504 REST not supported in ASCII mode\r\n");
   }
 
@@ -1536,6 +1692,7 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 
   env->data_offset = (off_t)off;
 
+    env->data_offset_is_rest = 1;
   return ftp_active_printf(env, "350 REST OK\r\n");
 }
 
@@ -1546,12 +1703,14 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 static int
 ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
   off_t off = env->data_offset;
+  int is_rest = env->data_offset_is_rest;
   env->data_offset = 0;
+  env->data_offset_is_rest = 0;
   struct stat st;
   size_t remaining;
   int err = 0;
 
-  if(env->type == 'A' && off != 0) {
+  if(env->type == 'A' && off != 0 && is_rest) {
     return ftp_active_printf(env, "504 REST not supported in ASCII mode\r\n");
   }
 
@@ -1576,10 +1735,6 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
     return ftp_data_open_error_reply(env);
   }
 
-#if defined(POSIX_FADV_SEQUENTIAL) && !defined(__ORBIS__)
-  posix_fadvise(fd, off, 0, POSIX_FADV_SEQUENTIAL);
-#endif
-
   if(env->type == 'A') {
     if(ftp_copy_ascii_out(env, fd)) {
       err = ftp_data_xfer_error_reply(env);
@@ -1593,7 +1748,7 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
       (void)setsockopt(env->data_fd, IPPROTO_TCP, TCP_NODELAY, &one,
                        sizeof(one));
 #endif
-    } else if(remaining >= 131072) {
+    } else if(remaining >= 128*1024) {
 #ifdef TCP_NOPUSH
       (void)setsockopt(env->data_fd, IPPROTO_TCP, TCP_NOPUSH, &one,
                        sizeof(one));
@@ -1712,7 +1867,7 @@ ftp_cmd_RMD(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "226 Directory deleted\r\n");
+  return ftp_active_printf(env, "250 Directory deleted\r\n");
 }
 
 
@@ -1757,7 +1912,7 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "226 Path renamed\r\n");
+  return ftp_active_printf(env, "250Path renamed\r\n");
 }
 
 
@@ -1799,6 +1954,7 @@ ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
 int
 ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
   off_t off = env->data_offset;
+  int is_rest = env->data_offset_is_rest;
   char pathbuf[PATH_MAX];
   void *readbuf = env->xfer_buf;
   size_t bufsize = env->xfer_buf_size;
@@ -1807,20 +1963,48 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
   ssize_t len;
   struct stat st;
   int flags = O_WRONLY;
+#ifdef O_CLOEXEC
+  flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+  flags |= O_NOFOLLOW;
+#endif
   int fd;
 
   env->data_offset = 0;
-
+  env->data_offset_is_rest = 0;
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: STOR <FILENAME>\r\n");
   }
 
-  if(env->type == 'A' && off != 0) {
+  if(env->type == 'A' && off != 0 && is_rest) {
     env->data_offset = 0;
     return ftp_active_printf(env, "504 REST not supported in ASCII mode\r\n");
   }
 
   ftp_abspath(env, pathbuf, arg);
+  // Reject symlinks and non-regular files as upload targets.
+  // (If you want to allow symlinks, remove the lstat() block below.)
+#ifdef S_IFLNK
+  {
+    struct stat lst;
+    if(lstat(pathbuf, &lst) == 0) {
+      if(S_ISLNK(lst.st_mode)) {
+        return ftp_active_printf(env, "550 Symlinks are not allowed\r\n");
+      }
+    } else if(errno != ENOENT) {
+      return ftp_perror(env);
+    }
+  }
+#endif
+  if(stat(pathbuf, &st) == 0) {
+    if(!S_ISREG(st.st_mode)) {
+      return ftp_active_printf(env, "550 Not a regular file\r\n");
+    }
+  } else if(errno != ENOENT) {
+    return ftp_perror(env);
+  }
+
   if(off == 0) {
     flags |= O_CREAT | O_TRUNC;
   }
@@ -1941,12 +2125,34 @@ ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: APPE <FILENAME>\r\n");
   }
 
-  if(!env->data_offset) {
-    ftp_abspath(env, pathbuf, arg);
-    if(stat(pathbuf, &statbuf)) {
+  env->data_offset = 0;
+  env->data_offset_is_rest = 0;
+
+  ftp_abspath(env, pathbuf, arg);
+
+#ifdef S_IFLNK
+  {
+    struct stat lst;
+    if(lstat(pathbuf, &lst) == 0) {
+      if(S_ISLNK(lst.st_mode)) {
+        return ftp_active_printf(env, "550 Symlinks are not allowed\r\n");
+      }
+    } else if(errno != ENOENT) {
       return ftp_perror(env);
     }
+  }
+#endif
+
+  if(stat(pathbuf, &statbuf) == 0) {
+    if(!S_ISREG(statbuf.st_mode)) {
+      return ftp_active_printf(env, "550 Not a regular file\r\n");
+    }
     env->data_offset = statbuf.st_size;
+  } else {
+    if(errno != ENOENT) {
+      return ftp_perror(env);
+    }
+    env->data_offset = 0;
   }
 
   return ftp_cmd_STOR(env, arg);
@@ -1972,7 +2178,7 @@ ftp_cmd_TYPE(ftp_env_t *env, const char* arg) {
   case 'A':
   case 'I':
     env->type = 'I';
-    return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
+    return ftp_active_printf(env, "200 Type set to I\r\n");
 #else
   case 'A':
     env->data_offset = 0;
@@ -2286,9 +2492,9 @@ ftp_cmd_SELF(ftp_env_t *env, const char* arg) {
   env->self2elf = !env->self2elf;
 
   if(env->self2elf) {
-    return ftp_active_printf(env, "226 SELF transfer mode enabled\r\n");
+    return ftp_active_printf(env, "200 SELF transfer mode enabled\r\n");
   } else {
-    return ftp_active_printf(env, "226 SELF transfer mode disabled\r\n");
+    return ftp_active_printf(env, "200 SELF transfer mode disabled\r\n");
   }
 }
 
@@ -2309,9 +2515,9 @@ ftp_cmd_SELFCHK(ftp_env_t *env, const char *arg) {
   }
 
   if(env->self_verify) {
-    return ftp_active_printf(env, "226 SELF digest verification enabled\r\n");
+    return ftp_active_printf(env, "200 SELF digest verification enabled\r\n");
   } else {
-    return ftp_active_printf(env, "226 SELF digest verification disabled\r\n");
+    return ftp_active_printf(env, "200 SELF digest verification disabled\r\n");
   }
 }
 

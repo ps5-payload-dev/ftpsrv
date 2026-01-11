@@ -31,7 +31,7 @@ along with this program; see the file COPYING. If not, see
 #define FTP_CTRL_TIMEOUT_SEC 600
 #endif
 #ifndef FTP_DATA_TIMEOUT_SEC
-#define FTP_DATA_TIMEOUT_SEC 60
+#define FTP_DATA_TIMEOUT_SEC 300
 #endif
 
 
@@ -248,6 +248,26 @@ io_set_socket_opts(int fd, int is_data) {
       rc = -1;
     }
   }
+
+#ifdef SO_KEEPALIVE
+  if(!is_data) {
+    int one = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
+
+    #ifdef TCP_KEEPIDLE
+      int idle = 30;
+      (void)setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+    #endif
+    #ifdef TCP_KEEPINTVL
+      int intvl = 10;
+      (void)setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    #endif
+    #ifdef TCP_KEEPCNT
+      int cnt = 3;
+      (void)setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
+    #endif
+  }
+#endif
 
 #ifdef TCP_NODELAY
   if(!is_data) {
