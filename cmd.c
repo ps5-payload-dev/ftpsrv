@@ -76,6 +76,10 @@ ftp_data_open(ftp_env_t *env) {
   socklen_t addr_len;
   int opt;
 
+  if(env->data_fd != -1) {
+    close(env->data_fd);
+  }
+
   if(env->data_addr.sin_port) {
     if(connect(env->data_fd, (struct sockaddr*)&env->data_addr,
 	       sizeof(env->data_addr))) {
@@ -138,6 +142,9 @@ ftp_data_close(ftp_env_t *env) {
   if(close(env->data_fd)) {
     return -1;
   }
+
+  env->data_fd = -1;
+
   return 0;
 }
 
@@ -461,6 +468,9 @@ ftp_cmd_PORT(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: PORT <addr>\r\n");
   }
 
+  if(env->data_fd != -1) {
+    close(env->data_fd);
+  }
   if((env->data_fd=socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     return ftp_perror(env);
   }
