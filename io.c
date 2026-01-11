@@ -253,15 +253,6 @@ io_set_socket_opts(int fd, int is_data) {
     }
   }
 
-#ifdef TCP_NOPUSH
-  if(is_data) {
-    int one = 1;
-    if(setsockopt(fd, IPPROTO_TCP, TCP_NOPUSH, &one, sizeof(one)) < 0) {
-      rc = -1;
-    }
-  }
-#endif
-
 #ifdef TCP_NODELAY
   if(!is_data) {
     int one = 1;

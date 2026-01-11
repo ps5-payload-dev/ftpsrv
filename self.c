@@ -387,7 +387,7 @@ self_is_valid(const char* path) {
     return 0;
   }
 
-  if (!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf") || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx"|| ftp_strieq(dot, ".self")))) {
+  if (!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf") || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx") || ftp_strieq(dot, ".self"))) {
     return 0;
   }
 

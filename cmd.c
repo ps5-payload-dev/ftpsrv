@@ -21,6 +21,7 @@ along with this program; see the file COPYING. If not, see
 #include <inttypes.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -1820,6 +1821,18 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
   }
   else if (remaining)
   {
+
+    int one = 1;
+    if (remaining < 1460 ) { // Typical MSS size
+    #ifdef TCP_NODELAY
+      (void)setsockopt(env->data_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    #endif
+    } else if (remaining >= 131072) {
+    #ifdef TCP_NOPUSH
+      (void)setsockopt(env->data_fd, IPPROTO_TCP, TCP_NOPUSH, &one, sizeof(one));
+    #endif
+    }
+
     #ifdef IO_USE_SENDFILE
     if (io_sendfile(fd, env->data_fd, off, remaining))
     {
@@ -1828,6 +1841,9 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd)
       return err;
     }
     #else 
+    
+    
+    
     if (env->xfer_buf && env->xfer_buf_size)
     {
       if (io_ncopy_buf(fd, env->data_fd, remaining, env->xfer_buf,
