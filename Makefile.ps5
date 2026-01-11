@@ -27,7 +27,7 @@ ELF := ftpsrv-ps5.elf
 
 VERSION_TAG := $(shell git describe --abbrev=6 --dirty --always --tags)
 
-CFLAGS := -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\" -I.
+CFLAGS := $(CFLAGS) -Wall -Werror -DVERSION_TAG=\"$(VERSION_TAG)\" -I. -O3 -DNDEBUG -march=znver2 -mtune=znver2 -flto
 SOURCE := srv.c cmd.c notify.c io.c self.c sha256.c
 SOURCE += main-prospero.c cmd-prospero.c self-prospero.c
 SOURCE += io-freebsd.c
@@ -42,4 +42,3 @@ clean:
 
 test: $(ELF)
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
-

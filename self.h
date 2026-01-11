@@ -93,12 +93,13 @@ void* self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind);
  * Extract the ELF embedded within the given SELF.
  **/
 int self_extract_elf(int self_fd, int elf_fd);
+int self_extract_elf_ex(int self_fd, int elf_fd, int verify);
 
 
 /**
  * Check if the given path is a SELF file.
  **/
-int self_is_valid(const char* path);
+size_t self_is_valid(const char* path);
 
 
 /**

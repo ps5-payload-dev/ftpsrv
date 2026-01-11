@@ -21,14 +21,14 @@ along with this program; see the file COPYING. If not, see
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <ctype.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
 #include "io.h"
 #include "self.h"
 #include "sha256.h"
-
+#include "cmd.h"
 
 /**
  * This global lock is used to address race conditions that may occur when
@@ -72,7 +72,7 @@ decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
  **/
 static int
 copy_segment(int from_fd, off_t from_start, int to_fd, off_t to_start,
-	     size_t size) {
+             size_t size) {
   return io_pcopy(from_fd, to_fd, from_start, to_start, size);
 }
 
@@ -206,7 +206,7 @@ self_get_elfsize(const char* path) {
 
 
 int
-self_extract_elf(int self_fd, int elf_fd) {
+self_extract_elf_ex(int self_fd, int elf_fd, int verify) {
   uint8_t hash[SHA256_BLOCK_SIZE];
   self_exinfo_t extinfo;
   self_entry_t* entries;
@@ -302,7 +302,7 @@ self_extract_elf(int self_fd, int elf_fd) {
     // PT_SCE_VERSION segment is appended at the end of the SELF file
     if(phdr.p_type == 0x6fffff01) {
       if(copy_segment(self_fd, head.file_size, elf_fd, phdr.p_offset,
-		      phdr.p_filesz)) {
+                      phdr.p_filesz)) {
 #if 0 // Some FSELFs are missing the version data, ignore error
 	free(entries);
 	return -1;
@@ -316,8 +316,8 @@ self_extract_elf(int self_fd, int elf_fd) {
     for(int j=0; j<head.num_entries; j++) {
       if(entries[j].props.segment_index == i &&
 	 entries[j].props.has_blocks) {
-	entry = &entries[j];
-	break;
+        entry = &entries[j];
+        break;
       }
     }
     if(!entry) {
@@ -327,17 +327,21 @@ self_extract_elf(int self_fd, int elf_fd) {
     // Decrypt and/or copy the segment
     if(entry->props.is_encrypted || entry->props.is_compressed) {
       if(decrypt_segment(self_fd, elf_fd, &phdr, i)) {
-	free(entries);
-	return -1;
+        free(entries);
+        return -1;
       }
     } else if(copy_segment(self_fd, entry->offset, elf_fd, phdr.p_offset,
-			   phdr.p_filesz)) {
+                           phdr.p_filesz)) {
       free(entries);
       return -1;
     }
   }
 
   free(entries);
+
+  if(!verify) {
+    return 0;
+  }
 
   // Compute the SHA256 sum of the ELF
   if(sha256sum(elf_fd, hash)) {
@@ -370,42 +374,26 @@ self_extract_elf(int self_fd, int elf_fd) {
 
 
 int
-self_is_valid(const char* path) {
-  self_head_t head;
-  struct stat st;
-  ssize_t n;
-  int fd;
-
-  if(stat(path, &st)) {
-    return -1;
-  }
-  if(!S_ISREG(st.st_mode)) {
-    return 0;
-  }
-
-  if((fd=open(path, O_RDONLY, 0)) < 0) {
-    return -1;
-  }
-
-  if((n=read(fd, &head, sizeof(head))) < 0) {
-    close(fd);
-    return -1;
-  }
-
-  if(n != sizeof(head)) {
-    close(fd);
-    return 0;
-  }
-
-  if(head.magic != SELF_PS4_MAGIC && head.magic != SELF_PS5_MAGIC) {
-    close(fd);
-    return 0;
-  }
-
-  close(fd);
-  return 1;
+self_extract_elf(int self_fd, int elf_fd) {
+  return self_extract_elf_ex(self_fd, elf_fd, 1);
 }
 
+size_t
+self_is_valid(const char* path) {
+  const char* dot = strrchr(path, '.');
+
+  if(!dot) {
+    return 0;
+  }
+
+  if(!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf")
+       || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx")
+       || ftp_strieq(dot, ".self"))) {
+    return 0;
+  }
+
+  return self_get_elfsize(path);
+}
 
 /*
   Local Variables:

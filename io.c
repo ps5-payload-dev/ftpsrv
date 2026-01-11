@@ -16,24 +16,42 @@ along with this program; see the file COPYING. If not, see
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
 #include <sys/errno.h>
 
 #include "io.h"
 
+#ifndef FTP_CTRL_TIMEOUT_SEC
+#define FTP_CTRL_TIMEOUT_SEC 600
+#endif
+#ifndef FTP_DATA_TIMEOUT_SEC
+#define FTP_DATA_TIMEOUT_SEC 60
+#endif
+
 
 int
 io_nread(int fd, void* buf, size_t n) {
-  int r;
+  size_t off = 0;
 
-  if((r=read(fd, buf, n)) < 0) {
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+  while(off < n) {
+    ssize_t r = read(fd, (char*)buf + off, n - off);
+    if(r < 0) {
+      if(errno == EINTR) {
+        continue;
+      }
+      return -1;
+    }
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    off += (size_t)r;
   }
 
   return 0;
@@ -42,15 +60,21 @@ io_nread(int fd, void* buf, size_t n) {
 
 int
 io_nwrite(int fd, const void* buf, size_t n) {
-  int r;
+  size_t off = 0;
 
-  if((r=write(fd, buf, n)) < 0) {
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+  while(off < n) {
+    ssize_t r = write(fd, (const char*)buf + off, n - off);
+    if(r < 0) {
+      if(errno == EINTR) {
+        continue;
+      }
+      return -1;
+    }
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    off += (size_t)r;
   }
 
   return 0;
@@ -92,15 +116,21 @@ io_ncopy(int fd_in, int fd_out, size_t size) {
 
 int
 io_pread(int fd, void* buf, size_t n, off_t off) {
-  int r;
+  size_t done = 0;
 
-  if((r=pread(fd, buf, n, off)) < 0) {
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+  while(done < n) {
+    ssize_t r = pread(fd, (char*)buf + done, n - done, off + (off_t)done);
+    if(r < 0) {
+      if(errno == EINTR) {
+        continue;
+      }
+      return -1;
+    }
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    done += (size_t)r;
   }
 
   return 0;
@@ -109,15 +139,22 @@ io_pread(int fd, void* buf, size_t n, off_t off) {
 
 int
 io_pwrite(int fd, const void* buf, size_t n, off_t off) {
-  int r;
+  size_t done = 0;
 
-  if((r=pwrite(fd, buf, n, off)) < 0) {
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+  while(done < n) {
+    ssize_t r = pwrite(fd, (const char*)buf + done, n - done,
+                       off + (off_t)done);
+    if(r < 0) {
+      if(errno == EINTR) {
+        continue;
+      }
+      return -1;
+    }
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    done += (size_t)r;
   }
 
   return 0;
@@ -158,3 +195,68 @@ io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t size) {
   return 0;
 }
 
+int
+io_ncopy_buf(int fd_in, int fd_out, size_t size, void* buf, size_t bufsize) {
+  size_t copied = 0;
+  ssize_t n;
+
+  if(!buf || !bufsize) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  while(copied < size) {
+    n = size - copied;
+    if(n > (ssize_t)bufsize) {
+      n = (ssize_t)bufsize;
+    }
+
+    if(io_nread(fd_in, buf, (size_t)n)) {
+      return -1;
+    }
+    if(io_nwrite(fd_out, buf, (size_t)n)) {
+      return -1;
+    }
+
+    copied += (size_t)n;
+  }
+
+  return 0;
+}
+
+int
+io_set_socket_opts(int fd, int is_data) {
+  int rc = 0;
+  int buf = is_data ? IO_SOCK_DATA_BUFSIZE : IO_SOCK_CTRL_BUFSIZE;
+
+  if(setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf)) < 0) {
+    rc = -1;
+  }
+  if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf)) < 0) {
+    rc = -1;
+  }
+
+  int timeout_sec = is_data ? FTP_DATA_TIMEOUT_SEC : FTP_CTRL_TIMEOUT_SEC;
+  if(timeout_sec > 0) {
+    struct timeval tv;
+    memset(&tv, 0, sizeof(tv));
+    tv.tv_sec = timeout_sec;
+    if(setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
+      rc = -1;
+    }
+    if(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+      rc = -1;
+    }
+  }
+
+#ifdef TCP_NODELAY
+  if(!is_data) {
+    int one = 1;
+    if(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) < 0) {
+      rc = -1;
+    }
+  }
+#endif
+
+  return rc;
+}

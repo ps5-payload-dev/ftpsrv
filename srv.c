@@ -19,9 +19,9 @@ along with this program; see the file COPYING. If not, see
 #include <sys/types.h>
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <ifaddrs.h>
-#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -32,6 +32,9 @@ along with this program; see the file COPYING. If not, see
 #include "log.h"
 #include "notify.h"
 
+#ifndef FTP_MAX_LINE
+#define FTP_MAX_LINE 8192
+#endif
 
 /**
  * Map names of commands to function entry points.
@@ -41,6 +44,17 @@ typedef struct ftp_command {
   ftp_command_fn_t *func;
 } ftp_command_t;
 
+/**
+ * Buffered reader state.
+ **/
+typedef struct ftp_reader {
+  int fd;
+  char buf[4096];
+  size_t pos;
+  size_t len;
+  int line_too_long;
+  int timed_out;
+} ftp_reader_t;
 
 /**
  * Lookup table for FTP commands.
@@ -50,9 +64,15 @@ static ftp_command_t commands[] = {
   {"CDUP", ftp_cmd_CDUP},
   {"CWD",  ftp_cmd_CWD},
   {"DELE", ftp_cmd_DELE},
+  {"EPRT", ftp_cmd_EPRT},
+  {"EPSV", ftp_cmd_EPSV},
   {"LIST", ftp_cmd_LIST},
   {"MKD",  ftp_cmd_MKD},
+  {"MLSD", ftp_cmd_MLSD},
+  {"MLST", ftp_cmd_MLST},
+  {"NLST", ftp_cmd_NLST},
   {"NOOP", ftp_cmd_NOOP},
+  {"PASS", ftp_cmd_PASS},
   {"PASV", ftp_cmd_PASV},
   {"PORT", ftp_cmd_PORT},
   {"PWD",  ftp_cmd_PWD},
@@ -67,11 +87,21 @@ static ftp_command_t commands[] = {
   {"SYST", ftp_cmd_SYST},
   {"TYPE", ftp_cmd_TYPE},
   {"USER", ftp_cmd_USER},
+  {"ABOR", ftp_cmd_ABOR},
+  {"ALLO", ftp_cmd_ALLO},
+  {"FEAT", ftp_cmd_FEAT},
+  {"HELP", ftp_cmd_HELP},
+  {"MDTM", ftp_cmd_MDTM},
+  {"MODE", ftp_cmd_MODE},
+  {"OPTS", ftp_cmd_OPTS},
+  {"STAT", ftp_cmd_STAT},
+  {"STRU", ftp_cmd_STRU},
 
   // custom commands
   {"KILL", ftp_cmd_KILL},
   {"MTRW", ftp_cmd_MTRW},
   {"SELF", ftp_cmd_SELF},
+  {"SCHK", ftp_cmd_SELFCHK},
   {"CHMOD", ftp_cmd_CHMOD},
 
   // duplicates that ensure commands are 4 bytes long
@@ -97,67 +127,152 @@ static int nb_ftp_commands = (sizeof(commands)/sizeof(ftp_command_t));
 /**
  * Read a line from a file descriptor.
  **/
+static int
+ftp_reader_fill(ftp_reader_t *reader) {
+  ssize_t len;
+
+  reader->timed_out = 0;
+
+  do {
+    len = read(reader->fd, reader->buf, sizeof(reader->buf));
+  } while(len == -1 && errno == EINTR);
+
+  if(len <= 0) {
+    if(len < 0 && (errno == EAGAIN
+#ifdef EWOULDBLOCK
+                   || errno == EWOULDBLOCK
+#endif
+#ifdef ETIMEDOUT
+                   || errno == ETIMEDOUT
+#endif
+                   )) {
+      reader->timed_out = 1;
+    }
+    return -1;
+  }
+
+  reader->pos = 0;
+  reader->len = (size_t)len;
+
+  return 0;
+}
+
 static char*
-ftp_readline(int fd) {
+ftp_readline(ftp_reader_t *reader) {
   int bufsize = 1024;
   int position = 0;
+  int line_ready = 0;
+  int overflow = 0;
   char *buffer_backup;
-  char *buffer = calloc(bufsize, sizeof(char));
-  char c;
+  char *buffer = malloc(bufsize);
 
   if(!buffer) {
     FTP_LOG_PERROR("malloc");
     return NULL;
   }
 
+  reader->line_too_long = 0;
+  reader->timed_out = 0;
+
   while(1) {
-    int len = read(fd, &c, 1);
-    if(len == -1 && errno == EINTR) {
-      continue;
+    if(reader->pos >= reader->len) {
+      if(ftp_reader_fill(reader)) {
+        free(buffer);
+        return NULL;
+      }
     }
 
-    if(len <= 0) {
-      free(buffer);
-      return NULL;
-    }
+    char c = reader->buf[reader->pos++];
 
     if(c == '\r') {
-      buffer[position] = '\0';
+      if(!overflow) {
+        buffer[position] = '\0';
+      }
+      line_ready = 1;
       position = 0;
       continue;
     }
 
     if(c == '\n') {
+      if(!line_ready && !overflow) {
+        buffer[position] = '\0';
+      }
+      if(overflow) {
+        buffer[0] = '\0';
+      }
       return buffer;
     }
 
-    buffer[position++] = c;
+    if(line_ready) {
+      line_ready = 0;
+    }
 
-    if(position >= bufsize) {
+    if(!overflow) {
+      buffer[position++] = c;
+    }
+
+    if(position + 1 >= bufsize) {
+      if(bufsize >= FTP_MAX_LINE) {
+        overflow = 1;
+        reader->line_too_long = 1;
+        continue;
+      }
+
       bufsize += 1024;
+      if(bufsize > FTP_MAX_LINE) {
+        bufsize = FTP_MAX_LINE;
+      }
       buffer_backup = buffer;
       buffer = realloc(buffer, bufsize);
       if(!buffer) {
-	FTP_LOG_PERROR("realloc");
-	free(buffer_backup);
-	return NULL;
+        FTP_LOG_PERROR("realloc");
+        free(buffer_backup);
+        return NULL;
       }
     }
   }
 }
 
+static int
+ftp_prefix_ieq(const char *s, const char *prefix, size_t n) {
+  for(size_t i = 0; i < n; i++) {
+    unsigned char c = (unsigned char)s[i];
+    if(!c) {
+      return 0;
+    }
+    if(toupper(c) != (unsigned char)prefix[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
 
 /**
  * Execute an FTP command.
  **/
 static int
 ftp_execute(ftp_env_t *env, char *line) {
+  while(*line == ' ') {
+    line++;
+  }
+  if(!*line) {
+    return 0;
+  }
+
   char *sep = strchr(line, ' ');
   char *arg = strchr(line, 0);
 
   if(sep) {
     sep[0] = 0;
     arg = sep + 1;
+  }
+
+  while(*arg == ' ') {
+    arg++;
+  }
+
+  for(char *p = line; *p; p++) {
+    *p = (char)toupper((unsigned char)*p);
   }
 
   for(int i=0; i<nb_ftp_commands; i++) {
@@ -182,7 +297,7 @@ ftp_greet(ftp_env_t *env) {
 
   snprintf(msg, sizeof(msg),
 	   "220-Welcome to ftpsrv.elf running on pid %d, compiled at %s %s\r\n",
-	   getpid(), __DATE__, __TIME__);
+                         getpid(), __DATE__, __TIME__);
   strncat(msg, "220 Service is ready\r\n", sizeof(msg)-1);
 
   len = strlen(msg);
@@ -200,10 +315,10 @@ ftp_greet(ftp_env_t *env) {
 static void*
 ftp_thread(void *args) {
   ftp_env_t env;
+  ftp_reader_t reader;
   bool running;
   char *line;
-  char* cmd;
-  int opt;
+  char *cmd;
 
   env.data_fd     = -1;
   env.passive_fd  = -1;
@@ -211,32 +326,40 @@ ftp_thread(void *args) {
 
   env.type        = 'I';
   env.data_offset = 0;
-  env.self2elf    = 1;
+  env.self2elf    = 0;
+  env.self_verify = 1;
 
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));
   memset(&env.data_addr, 0, sizeof(env.data_addr));
-
-  opt = 1;
-  if(setsockopt(env.active_fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt))) {
-    FTP_LOG_PERROR("setsockopt");
+  env.xfer_buf_size = IO_COPY_BUFSIZE;
+  env.xfer_buf = malloc(env.xfer_buf_size);
+  if(!env.xfer_buf) {
+    env.xfer_buf_size = 0;
   }
+  memset(&reader, 0, sizeof(reader));
+  reader.fd = env.active_fd;
 
-  env.readbuf_size = IO_COPY_BUFSIZE;
-  if(!(env.readbuf=malloc(env.readbuf_size))) {
-    FTP_LOG_PERROR("malloc");
-    running = 0;
-  } else {
-    running = !ftp_greet(&env);
-  }
+  io_set_socket_opts(env.active_fd, 0);
+
+  running = !ftp_greet(&env);
 
   while(running) {
-    if(!(line=ftp_readline(env.active_fd))) {
+    if(!(line = ftp_readline(&reader))) {
+      if(reader.timed_out) {
+        ftp_active_printf(&env, "421 Control connection timed out\r\n");
+      }
       break;
     }
 
+    if(reader.line_too_long) {
+      ftp_active_printf(&env, "500 Line too long\r\n");
+      free(line);
+      continue;
+    }
+
     cmd = line;
-    if(!strncmp(line, "SITE ", 5)) {
+    if(ftp_prefix_ieq(line, "SITE ", 5)) {
       cmd += 5;
     }
 
@@ -247,20 +370,20 @@ ftp_thread(void *args) {
     free(line);
   }
 
-  if(env.active_fd > 0) {
+  if(env.active_fd >= 0) {
     close(env.active_fd);
   }
 
-  if(env.passive_fd > 0) {
+  if(env.passive_fd >= 0) {
     close(env.passive_fd);
   }
 
-  if(env.data_fd > 0) {
+  if(env.data_fd >= 0) {
     close(env.data_fd);
   }
 
-  if(env.readbuf) {
-    free(env.readbuf);
+  if(env.xfer_buf) {
+    free(env.xfer_buf);
   }
 
   pthread_exit(NULL);
@@ -280,6 +403,8 @@ ftp_serve(uint16_t port, int notify_user) {
   struct ifaddrs *ifaddr;
   int ifaddr_wait = 1;
   socklen_t addr_len;
+  pthread_attr_t attr;
+  int use_attr = 0;
   pthread_t trd;
   int connfd;
   int srvfd;
@@ -293,12 +418,13 @@ ftp_serve(uint16_t port, int notify_user) {
     puts("||_|    \\__| | .__/  |___/ |_|      \\_/   (_)  \\___| |_| |_|  |");
     puts("|            |_|                                              |");
     printf("| %-26s Copyright (C) 2025 John Törnblom |\n", VERSION_TAG);
+    puts("|                                                   & drakmor |\n");
     puts("'-------------------------------------------------------------'");
   }
 
   if(getifaddrs(&ifaddr) == -1) {
     FTP_LOG_PERROR("getifaddrs");
-    exit(EXIT_FAILURE);
+    return 0;
   }
 
   // Enumerate all AF_INET IPs
@@ -344,6 +470,7 @@ ftp_serve(uint16_t port, int notify_user) {
 
   if(setsockopt(srvfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
     FTP_LOG_PERROR("setsockopt");
+    close(srvfd);
     return -1;
   }
 
@@ -354,15 +481,29 @@ ftp_serve(uint16_t port, int notify_user) {
 
   if(bind(srvfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
     FTP_LOG_PERROR("bind");
+    close(srvfd);
     return -1;
   }
 
-  if(listen(srvfd, SOMAXCONN) != 0) {
+  if(listen(srvfd, FTP_LISTEN_BACKLOG) != 0) {
     FTP_LOG_PERROR("listen");
+    close(srvfd);
     return -1;
   }
 
   addr_len = sizeof(client_addr);
+
+  if(!pthread_attr_init(&attr)) {
+    size_t stack_size = 512 * 1024;
+    use_attr = 1;
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+#ifdef PTHREAD_STACK_MIN
+    if(stack_size < PTHREAD_STACK_MIN) {
+      stack_size = PTHREAD_STACK_MIN;
+    }
+#endif
+    pthread_attr_setstacksize(&attr, stack_size);
+  }
 
   while(1) {
     if((connfd=accept(srvfd, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
@@ -370,9 +511,19 @@ ftp_serve(uint16_t port, int notify_user) {
       break;
     }
 
-    if(!pthread_create(&trd, NULL, ftp_thread, (void*)(long)connfd)) {
+    if(pthread_create(&trd, use_attr ? &attr : NULL, ftp_thread,
+                      (void *)(long)connfd)) {
+      FTP_LOG_PERROR("pthread_create");
+      close(connfd);
+      continue;
+    }
+    if(!use_attr) {
       pthread_detach(trd);
     }
+  }
+
+  if(use_attr) {
+    pthread_attr_destroy(&attr);
   }
 
   return close(srvfd);

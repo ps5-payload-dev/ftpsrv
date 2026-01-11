@@ -24,30 +24,52 @@ along with this program; see the file COPYING. If not, see
 
 int
 io_sendfile(int fd, int s, off_t offset, size_t n) {
-  off_t copied = 0;
-  off_t sbytes = 0;
-  size_t nbytes;
+  size_t copied = 0;
 
   while (copied < n) {
-    nbytes = n - copied;
+    size_t nbytes = n - copied;
     if(nbytes > IO_COPY_BUFSIZE) {
       nbytes = IO_COPY_BUFSIZE;
     }
 
-    if(sendfile(fd, s, offset, nbytes, 0, &sbytes, 0) < 0) {
-      if(errno == EINTR) {
-	continue;
+    off_t sbytes = 0;
+
+    int rc = sendfile(fd, s, offset, nbytes, NULL, &sbytes,
+                      0);  // may be SF_NOCACHE?
+    if(sbytes > 0) {
+      copied += (size_t)sbytes;
+      offset += sbytes;
+    }
+
+    if(rc == 0) {
+      if(sbytes == 0) {
+        // no progress and successful (EOF/truncate)?
+        errno = EIO;
+        return -1;
       }
-      return -1;
+      continue;
     }
 
-    if(sbytes == 0) {
-      errno = EPIPE;
-      return -1;
+    if(errno == EINTR) {
+      continue;
     }
 
-    copied += sbytes;
-    offset += sbytes;
+    if(errno == EAGAIN
+#ifdef EWOULDBLOCK
+       || errno == EWOULDBLOCK
+#endif
+#ifdef ETIMEDOUT
+       || errno == ETIMEDOUT
+#endif
+    ) {
+      // was progress, try again
+      if(sbytes > 0) {
+        continue;
+      }
+      // no progess?
+      return -1;
+    }
+    return -1;
   }
 
   return 0;

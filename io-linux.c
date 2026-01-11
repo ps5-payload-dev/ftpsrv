@@ -24,19 +24,18 @@ along with this program; see the file COPYING. If not, see
 
 int
 io_sendfile(int in_fd, int out_fd, off_t offset, size_t n) {
-  off_t copied = 0;
-  size_t count;
+  size_t copied = 0;
   ssize_t r;
 
   while (copied < n) {
-    count = n - copied;
+    size_t count = n - copied;
     if(count > IO_COPY_BUFSIZE) {
       count = IO_COPY_BUFSIZE;
     }
 
     if((r=sendfile(out_fd, in_fd, &offset, count)) < 0) {
       if(errno == EINTR) {
-	continue;
+        continue;
       }
       return -1;
     }
