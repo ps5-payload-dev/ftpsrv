@@ -404,7 +404,7 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
     }
 
     ftp_mode_string(statbuf.st_mode, modebuf);
-    localtime_r((const time_t *)&(statbuf.st_ctim), &tm);
+    gmtime_r(&statbuf.st_ctim.tv_sec, &tm);
     strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &tm);
     ftp_data_printf(env, "%s %lu %lu %lu %llu %s %s\r\n", modebuf,
 		    statbuf.st_nlink, statbuf.st_uid, statbuf.st_gid,
