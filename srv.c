@@ -270,6 +270,13 @@ ftp_execute(ftp_env_t *env, char *line) {
   while(*arg == ' ') {
     arg++;
   }
+  if(*arg) {
+    char *end = arg + strlen(arg);
+    while(end > arg && end[-1] == ' ') {
+      end--;
+    }
+    *end = '\0';
+  }
 
   for(char *p = line; *p; p++) {
     *p = (char)toupper((unsigned char)*p);

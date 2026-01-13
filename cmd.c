@@ -76,22 +76,20 @@ ftp_mode_string(mode_t mode, char *buf) {
   *buf = c;
 }
 
-static void
+static int
 ftp_normpath(const char *path, char *out, size_t out_size) {
   size_t stack[PATH_MAX / 2 + 2];
   size_t sp = 0;
   size_t len = 1;
   const char *p = path;
 
-  if(!out_size) {
-    return;
+  if(!path || !out || out_size < 2) {
+    errno = EINVAL;
+    return -1;
   }
 
   out[0] = '/';
   out[1] = '\0';
-  if(out_size < 2) {
-    return;
-  }
 
   while(*p == '/') {
     p++;
@@ -127,17 +125,15 @@ ftp_normpath(const char *path, char *out, size_t out_size) {
     size_t prelen = len;
     if(len > 1) {
       if(len + 1 >= out_size) {
-        break;
+        errno = ENAMETOOLONG;
+        return -1;
       }
       out[len++] = '/';
     }
 
     if(len + comp_len >= out_size) {
-      comp_len = out_size - 1 - len;
-    }
-    if(!comp_len) {
-      out[len] = '\0';
-      break;
+      errno = ENAMETOOLONG;
+      return -1;
     }
 
     memcpy(out + len, start, comp_len);
@@ -148,6 +144,7 @@ ftp_normpath(const char *path, char *out, size_t out_size) {
       stack[sp++] = prelen;
     }
   }
+  return 0;
 }
 
 
@@ -516,17 +513,33 @@ ftp_data_open_error_reply(ftp_env_t *env) {
 
 /**
  * Create an absolute path from the current working directory.
+ * Returns 0 on success, -1 on error (errno set).
  **/
-void
-ftp_abspath(ftp_env_t *env, char *abspath, const char *path) {
-  char buf[PATH_MAX+1];
+int
+ftp_abspath(ftp_env_t *env, char *abspath, size_t abspath_size,
+            const char *path) {
+  char buf[PATH_MAX + 1];
+  int n;
+
+  if(!env || !abspath || !path || abspath_size < 2) {
+    errno = EINVAL;
+    return -1;
+  }
 
   if(path[0] != '/') {
-    snprintf(buf, sizeof(buf), "%s/%s", env->cwd, path);
-    ftp_normpath(buf, abspath, PATH_MAX + 1);
+    n = snprintf(buf, sizeof(buf), "%s/%s", env->cwd, path);
   } else {
-    ftp_normpath(path, abspath, PATH_MAX + 1);
+    n = snprintf(buf, sizeof(buf), "%s", path);
   }
+  if(n < 0 || (size_t)n >= sizeof(buf)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+
+  if(ftp_normpath(buf, abspath, abspath_size)) {
+    return -1;
+  }
+  return 0;
 }
 
 static const char *
@@ -807,7 +820,9 @@ int
 ftp_cmd_CDUP(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
 
-  ftp_abspath(env, pathbuf, "..");
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), "..")) {
+    return ftp_perror(env);
+  }
   snprintf(env->cwd, sizeof(env->cwd), "%s", pathbuf);
 
   return ftp_active_printf(env, "250 OK\r\n");
@@ -828,7 +843,9 @@ ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
   }
 
   mode = strtol(arg, 0, 8);
-  ftp_abspath(env, pathbuf, ptr+1);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), ptr+1)) {
+    return ftp_perror(env);
+  }
 
   if(chmod(pathbuf, mode)) {
     return ftp_perror(env);
@@ -850,7 +867,9 @@ ftp_cmd_CWD(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: CWD <PATH>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   if(stat(pathbuf, &st)) {
     return ftp_perror(env);
   }
@@ -876,7 +895,9 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: DELE <FILENAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   if(remove(pathbuf)) {
     return ftp_perror(env);
   }
@@ -1122,9 +1143,19 @@ ftp_cmd_LIST(ftp_env_t *env, const char *arg) {
 
   dir_path = ftp_list_path_arg(arg, argbuf, PATH_MAX + 1);
   if(dir_path) {
-    ftp_abspath(env, list_path, dir_path);
+    if(ftp_abspath(env, list_path, PATH_MAX + 1, dir_path)) {
+      free(argbuf);
+      free(list_path);
+      free(pathbuf);
+      return ftp_perror(env);
+    }
   } else {
-    ftp_normpath(env->cwd, list_path, PATH_MAX + 1);
+    if(ftp_normpath(env->cwd, list_path, PATH_MAX + 1)) {
+      free(argbuf);
+      free(list_path);
+      free(pathbuf);
+      return ftp_perror(env);
+    }
   }
   dir_path = list_path;
 
@@ -1254,9 +1285,17 @@ ftp_cmd_NLST(ftp_env_t *env, const char *arg) {
 
   dir_path = ftp_list_path_arg(arg, argbuf, PATH_MAX + 1);
   if(dir_path) {
-    ftp_abspath(env, list_path, dir_path);
+    if(ftp_abspath(env, list_path, PATH_MAX + 1, dir_path)) {
+      free(argbuf);
+      free(list_path);
+      return ftp_perror(env);
+    }
   } else {
-    ftp_normpath(env->cwd, list_path, PATH_MAX + 1);
+    if(ftp_normpath(env->cwd, list_path, PATH_MAX + 1)) {
+      free(argbuf);
+      free(list_path);
+      return ftp_perror(env);
+    }
   }
   dir_path = list_path;
 
@@ -1337,9 +1376,19 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
 
   dir_path = ftp_list_path_arg(arg, argbuf, PATH_MAX + 1);
   if(dir_path) {
-    ftp_abspath(env, list_path, dir_path);
+    if(ftp_abspath(env, list_path, PATH_MAX + 1, dir_path)) {
+      free(argbuf);
+      free(list_path);
+      free(pathbuf);
+      return ftp_perror(env);
+    }
   } else {
-    ftp_normpath(env->cwd, list_path, PATH_MAX + 1);
+    if(ftp_normpath(env->cwd, list_path, PATH_MAX + 1)) {
+      free(argbuf);
+      free(list_path);
+      free(pathbuf);
+      return ftp_perror(env);
+    }
   }
   dir_path = list_path;
 
@@ -1478,7 +1527,9 @@ ftp_cmd_MKD(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: MKD <DIRNAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   if(mkdir(pathbuf, 0777)) {
     return ftp_perror(env);
   }
@@ -1660,13 +1711,8 @@ ftp_cmd_QUIT(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_REST(ftp_env_t *env, const char* arg) {
-  const char *p = arg;
   char *end = NULL;
   long long off = 0;
-
-  while(*p == ' ') {
-    p++;
-  }
 
   if(env->type == 'A') {
     env->data_offset = 0;
@@ -1674,17 +1720,14 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "504 REST not supported in ASCII mode\r\n");
   }
 
-  if(!p[0]) {
+  if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: REST <OFFSET>\r\n");
   }
 
   errno = 0;
-  off = strtoll(p, &end, 10);
-  if(errno || end == p) {
+  off = strtoll(arg, &end, 10);
+  if(errno || end == arg) {
     return ftp_active_printf(env, "501 Usage: REST <OFFSET>\r\n");
-  }
-  while(*end == ' ') {
-    end++;
   }
   if(*end || off < 0 || (off_t)off != off) {
     return ftp_active_printf(env, "501 Usage: REST <OFFSET>\r\n");
@@ -1835,7 +1878,9 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RETR <PATH>\r\n");
   }
 
-  ftp_abspath(env, path, arg);
+  if(ftp_abspath(env, path, sizeof(path), arg)) {
+    return ftp_perror(env);
+  }
   if((fd=open(path, O_RDONLY, 0)) < 0) {
     return ftp_perror(env);
   }
@@ -1862,7 +1907,9 @@ ftp_cmd_RMD(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RMD <DIRNAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   if(rmdir(pathbuf)) {
     return ftp_perror(env);
   }
@@ -1882,7 +1929,9 @@ ftp_cmd_RNFR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RNFR <PATH>\r\n");
   }
 
-  ftp_abspath(env, env->rename_path, arg);
+  if(ftp_abspath(env, env->rename_path, sizeof(env->rename_path), arg)) {
+    return ftp_perror(env);
+  }
   if(stat(env->rename_path, &st)) {
     return ftp_perror(env);
   }
@@ -1907,7 +1956,9 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   if(rename(env->rename_path, pathbuf)) {
     return ftp_perror(env);
   }
@@ -1932,7 +1983,9 @@ ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: SIZE <FILENAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
 
   if(env->self2elf) {
     st.st_size = self_get_elfsize(pathbuf);
@@ -1982,7 +2035,9 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "504 REST not supported in ASCII mode\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   // Reject symlinks and non-regular files as upload targets.
   // (If you want to allow symlinks, remove the lstat() block below.)
 #ifdef S_IFLNK
@@ -2128,7 +2183,9 @@ ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
   env->data_offset = 0;
   env->data_offset_is_rest = 0;
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
 
 #ifdef S_IFLNK
   {
@@ -2231,30 +2288,26 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
  **/
 int
 ftp_cmd_OPTS(ftp_env_t *env, const char *arg) {
-  const char *p = arg;
   char opt[16];
   char val[16];
   size_t len = 0;
 
-  while(*p == ' ') {
-    p++;
-  }
-  if(!*p) {
+  if(!*arg) {
     return ftp_active_printf(env, "501 Usage: OPTS UTF8 ON\r\n");
   }
 
-  while(*p && *p != ' ' && len + 1 < sizeof(opt)) {
-    opt[len++] = *p++;
+  while(*arg && *arg != ' ' && len + 1 < sizeof(opt)) {
+    opt[len++] = *arg++;
   }
   opt[len] = '\0';
 
-  while(*p == ' ') {
-    p++;
+  while(*arg == ' ') {
+    arg++;
   }
 
   len = 0;
-  while(*p && *p != ' ' && len + 1 < sizeof(val)) {
-    val[len++] = *p++;
+  while(*arg && *arg != ' ' && len + 1 < sizeof(val)) {
+    val[len++] = *arg++;
   }
   val[len] = '\0';
 
@@ -2284,7 +2337,9 @@ ftp_cmd_MDTM(ftp_env_t *env, const char *arg) {
     return ftp_active_printf(env, "501 Usage: MDTM <FILENAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_perror(env);
+  }
   if(stat(pathbuf, &st)) {
     return ftp_perror(env);
   }
@@ -2309,29 +2364,33 @@ ftp_cmd_MLST(ftp_env_t *env, const char *arg) {
   int is_cdir = 0;
   int is_pdir = 0;
   uintmax_t size = 0;
-  const char *p = arg;
   const char *end;
   size_t name_len = 0;
 
-  while(*p == ' ') {
-    p++;
+  if(!*arg) {
+    end = arg;
+  } else {
+    end = arg + strlen(arg);
   }
-  end = p + strlen(p);
-  while(end > p && end[-1] == ' ') {
+  while(end > arg && end[-1] == ' ') {
     end--;
   }
-  name_len = (size_t)(end - p);
+  name_len = (size_t)(end - arg);
 
   if(name_len) {
     if(name_len >= sizeof(namebuf)) {
       name_len = sizeof(namebuf) - 1;
     }
-    memcpy(namebuf, p, name_len);
+    memcpy(namebuf, arg, name_len);
     namebuf[name_len] = '\0';
-    ftp_abspath(env, pathbuf, namebuf);
+    if(ftp_abspath(env, pathbuf, sizeof(pathbuf), namebuf)) {
+      return ftp_perror(env);
+    }
     name = namebuf;
   } else {
-    ftp_normpath(env->cwd, pathbuf, sizeof(pathbuf));
+    if(ftp_normpath(env->cwd, pathbuf, sizeof(pathbuf))) {
+      return ftp_perror(env);
+    }
     name = pathbuf;
   }
 
