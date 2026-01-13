@@ -493,6 +493,13 @@ ftp_errno_is_timeout(int e) {
 static int
 ftp_data_xfer_error_reply(ftp_env_t *env) {
   int e = errno;
+  if(e == EPIPE
+#ifdef ECONNRESET
+     || e == ECONNRESET
+#endif
+  ) {
+    return ftp_active_printf(env, "426 Data connection closed\r\n");
+  }
   if(ftp_errno_is_timeout(e)) {
     return ftp_active_printf(env, "426 Data connection timed out\r\n");
   }
