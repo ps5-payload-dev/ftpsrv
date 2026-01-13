@@ -41,6 +41,7 @@ typedef struct ftp_env {
   off_t data_offset;
   int data_offset_is_rest;
   char rename_path[PATH_MAX];
+  int rename_ready;
   struct sockaddr_in data_addr;
   void *xfer_buf;
   size_t xfer_buf_size;
