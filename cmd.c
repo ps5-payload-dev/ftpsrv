@@ -682,6 +682,10 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   uint32_t addr = 0;
   uint16_t port = 0;
 
+  if(arg[0]) {
+    return ftp_active_printf(env, "501 Usage: PASV\r\n");
+  }
+
   env->data_addr.sin_port = 0;
   env->data_addr.sin_addr.s_addr = 0;
   if(env->data_fd >= 0) {
@@ -755,6 +759,17 @@ ftp_cmd_EPSV(ftp_env_t *env, const char *arg) {
   struct sockaddr_in sockaddr;
   uint16_t port = 0;
 
+  if(arg[0]) {
+    char *end = NULL;
+    long proto = strtol(arg, &end, 10);
+    if(end == arg || *end) {
+      return ftp_active_printf(env, "501 Usage: EPSV [<NET-PRT>]\r\n");
+    }
+    if(proto != 1) {
+      return ftp_active_printf(env, "522 Network protocol not supported\r\n");
+    }
+  }
+
   env->data_addr.sin_port = 0;
   env->data_addr.sin_addr.s_addr = 0;
   if(env->data_fd >= 0) {
@@ -819,9 +834,16 @@ ftp_cmd_EPSV(ftp_env_t *env, const char *arg) {
 int
 ftp_cmd_CDUP(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
+  struct stat st;
 
   if(ftp_abspath(env, pathbuf, sizeof(pathbuf), "..")) {
     return ftp_perror(env);
+  }
+  if(stat(pathbuf, &st)) {
+    return ftp_perror(env);
+  }
+  if(!S_ISDIR(st.st_mode)) {
+    return ftp_active_printf(env, "550 No such directory\r\n");
   }
   snprintf(env->cwd, sizeof(env->cwd), "%s", pathbuf);
 
@@ -1541,7 +1563,7 @@ ftp_cmd_MKD(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "257 Directory created\r\n");
+  return ftp_active_printf(env, "257 \"%s\"\r\n", pathbuf);
 }
 
 
@@ -1932,6 +1954,7 @@ int
 ftp_cmd_RNFR(ftp_env_t *env, const char* arg) {
   struct stat st;
 
+  env->rename_ready = 0;
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: RNFR <PATH>\r\n");
   }
@@ -1943,6 +1966,7 @@ ftp_cmd_RNFR(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
+  env->rename_ready = 1;
   return ftp_active_printf(env, "350 Awaiting new name\r\n");
 }
 
@@ -1959,6 +1983,10 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RNTO <PATH>\r\n");
   }
 
+  if(!env->rename_ready) {
+    return ftp_active_printf(env, "503 Bad sequence of commands\r\n");
+  }
+  env->rename_ready = 0;
   if(lstat(env->rename_path, &st)) {
     return ftp_perror(env);
   }
@@ -2237,6 +2265,9 @@ ftp_cmd_SYST(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_TYPE(ftp_env_t *env, const char* arg) {
+  if(!arg[0]) {
+    return ftp_active_printf(env, "501 Usage: TYPE <TYPE>\r\n");
+  }
   switch(arg[0]) {
 #ifdef DISABLE_ASCII_MODE
   case 'A':
@@ -2253,7 +2284,7 @@ ftp_cmd_TYPE(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "200 Type set to %c\r\n", env->type);
 #endif
   default:
-    return ftp_active_printf(env, "501 Invalid argument to TYPE\r\n");
+    return ftp_active_printf(env, "504 Type not supported\r\n");
   }
 }
 
