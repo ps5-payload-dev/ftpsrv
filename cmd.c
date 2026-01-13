@@ -1912,7 +1912,7 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "250Path renamed\r\n");
+  return ftp_active_printf(env, "250 Path renamed\r\n");
 }
 
 
