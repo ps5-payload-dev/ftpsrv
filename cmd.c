@@ -837,6 +837,7 @@ ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
   char pathbuf[PATH_MAX];
   mode_t mode = 0;
   char* ptr;
+  struct stat lst;
 
   if(!arg[0] || !(ptr=strstr(arg, " "))) {
     return ftp_active_printf(env, "501 Usage: CHMOD <MODE> <PATH>\r\n");
@@ -847,6 +848,12 @@ ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
+  if(lstat(pathbuf, &lst)) {
+    return ftp_perror(env);
+  }
+  if(S_ISLNK(lst.st_mode)) {
+    return ftp_active_printf(env, "550 Symlinks are not allowed\r\n");
+  }
   if(chmod(pathbuf, mode)) {
     return ftp_perror(env);
   }
@@ -1932,7 +1939,7 @@ ftp_cmd_RNFR(ftp_env_t *env, const char* arg) {
   if(ftp_abspath(env, env->rename_path, sizeof(env->rename_path), arg)) {
     return ftp_perror(env);
   }
-  if(stat(env->rename_path, &st)) {
+  if(lstat(env->rename_path, &st)) {
     return ftp_perror(env);
   }
 
@@ -1952,7 +1959,7 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RNTO <PATH>\r\n");
   }
 
-  if(stat(env->rename_path, &st)) {
+  if(lstat(env->rename_path, &st)) {
     return ftp_perror(env);
   }
 
