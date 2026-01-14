@@ -20,15 +20,14 @@ along with this program; see the file COPYING. If not, see
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
-#include <ctype.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
 #include "io.h"
 #include "self.h"
 #include "sha256.h"
-#include "cmd.h"
 
 /**
  * This global lock is used to address race conditions that may occur when
@@ -386,9 +385,9 @@ self_is_valid(const char* path) {
     return 0;
   }
 
-  if(!(ftp_strieq(dot, ".bin") || ftp_strieq(dot, ".elf")
-       || ftp_strieq(dot, ".sprx") || ftp_strieq(dot, ".prx")
-       || ftp_strieq(dot, ".self"))) {
+  if(!(strcasecmp(dot, ".bin") == 0 || strcasecmp(dot, ".elf") == 0
+       || strcasecmp(dot, ".sprx") == 0 || strcasecmp(dot, ".prx") == 0
+       || strcasecmp(dot, ".self") == 0)) {
     return 0;
   }
 
