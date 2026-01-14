@@ -372,11 +372,6 @@ self_extract_elf_ex(int self_fd, int elf_fd, int verify) {
 }
 
 
-int
-self_extract_elf(int self_fd, int elf_fd) {
-  return self_extract_elf_ex(self_fd, elf_fd, 1);
-}
-
 size_t
 self_is_valid(const char* path) {
   const char* dot = strrchr(path, '.');
