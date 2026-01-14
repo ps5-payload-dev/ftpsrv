@@ -14,7 +14,6 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -168,8 +167,7 @@ ftp_data_open(ftp_env_t *env) {
     }
     if(connect(env->data_fd, (struct sockaddr*)&env->data_addr,
                sizeof(env->data_addr))) {
-      close(env->data_fd);
-      env->data_fd = -1;
+      ftp_data_close(env);
       return -1;
     }
   } else {
@@ -190,15 +188,13 @@ ftp_data_open(ftp_env_t *env) {
     ctrl_len = sizeof(ctrl_addr);
     if(getpeername(env->active_fd, (struct sockaddr *)&ctrl_addr, &ctrl_len) !=
        0) {
-      close(env->data_fd);
-      env->data_fd = -1;
+      ftp_data_close(env);
       errno = EACCES;
       return -1;
     }
     if(ctrl_addr.sin_family != AF_INET ||
        ctrl_addr.sin_addr.s_addr != data_addr.sin_addr.s_addr) {
-      close(env->data_fd);
-      env->data_fd = -1;
+      ftp_data_close(env);
       errno = EACCES;
       return -1;
     }
@@ -420,16 +416,33 @@ error:
  **/
 int
 ftp_data_close(ftp_env_t *env) {
-  if(env->data_fd < 0) {
-    return 0;
-  }
-
-  if(!close(env->data_fd)) {
+  int rc = 0;
+  if(env->data_fd >= 0) {
+    if(close(env->data_fd)) {
+      rc = -1;
+    }
     env->data_fd = -1;
-    return 0;
   }
-  env->data_fd = -1; // Force reset even on error to prevent double close
-  return -1;
+  return rc;
+}
+
+static void
+ftp_close_data_fds(ftp_env_t *env) {
+  ftp_data_close(env);
+  if(env->passive_fd >= 0) {
+    close(env->passive_fd);
+    env->passive_fd = -1;
+  }
+}
+
+static int
+ftp_perror_close_passive(ftp_env_t *env) {
+  int ret = ftp_perror(env);
+  if(env->passive_fd >= 0) {
+    close(env->passive_fd);
+    env->passive_fd = -1;
+  }
+  return ret;
 }
 
 
@@ -681,20 +694,12 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
 
   env->data_addr.sin_port = 0;
   env->data_addr.sin_addr.s_addr = 0;
-  if(env->data_fd >= 0) {
-    close(env->data_fd);
-    env->data_fd = -1;
-  }
+  ftp_close_data_fds(env);
 
   if(getsockname(env->active_fd, (struct sockaddr*)&sockaddr, &sockaddr_len)) {
     return ftp_perror(env);
   }
   addr = sockaddr.sin_addr.s_addr;
-
-  if(env->passive_fd >= 0) {
-    close(env->passive_fd);
-    env->passive_fd = -1;
-  }
 
   if((env->passive_fd=socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     return ftp_perror(env);
@@ -702,10 +707,7 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
 
   if(setsockopt(env->passive_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1},
                 sizeof(int)) < 0) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
 
   memset(&sockaddr, 0, sockaddr_len);
@@ -714,24 +716,15 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   sockaddr.sin_port = htons(0);
 
   if(bind(env->passive_fd, (struct sockaddr*)&sockaddr, sockaddr_len) != 0) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
 
   if(listen(env->passive_fd, FTP_LISTEN_BACKLOG) != 0) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
 
   if(getsockname(env->passive_fd, (struct sockaddr*)&sockaddr, &sockaddr_len)) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
   port = sockaddr.sin_port;
   uint32_t ip = ntohl(addr);
@@ -765,15 +758,7 @@ ftp_cmd_EPSV(ftp_env_t *env, const char *arg) {
 
   env->data_addr.sin_port = 0;
   env->data_addr.sin_addr.s_addr = 0;
-  if(env->data_fd >= 0) {
-    close(env->data_fd);
-    env->data_fd = -1;
-  }
-
-  if(env->passive_fd >= 0) {
-    close(env->passive_fd);
-    env->passive_fd = -1;
-  }
+  ftp_close_data_fds(env);
 
   if((env->passive_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     return ftp_perror(env);
@@ -781,10 +766,7 @@ ftp_cmd_EPSV(ftp_env_t *env, const char *arg) {
 
   if(setsockopt(env->passive_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1},
                 sizeof(int)) < 0) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
 
   memset(&sockaddr, 0, sockaddr_len);
@@ -793,25 +775,16 @@ ftp_cmd_EPSV(ftp_env_t *env, const char *arg) {
   sockaddr.sin_port = htons(0);
 
   if(bind(env->passive_fd, (struct sockaddr *)&sockaddr, sockaddr_len) != 0) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
 
   if(listen(env->passive_fd, FTP_LISTEN_BACKLOG) != 0) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
 
   if(getsockname(env->passive_fd, (struct sockaddr *)&sockaddr,
                  &sockaddr_len)) {
-    int ret = ftp_perror(env);
-    close(env->passive_fd);
-    env->passive_fd = -1;
-    return ret;
+    return ftp_perror_close_passive(env);
   }
   port = sockaddr.sin_port;
 
@@ -1602,15 +1575,7 @@ ftp_cmd_PORT(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "500 Illegal PORT command\r\n");
   }
 
-  if(env->passive_fd >= 0) {
-    close(env->passive_fd);
-    env->passive_fd = -1;
-  }
-
-  if(env->data_fd >= 0) {
-    close(env->data_fd);
-    env->data_fd = -1;
-  }
+  ftp_close_data_fds(env);
 
   if((env->data_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     return ftp_perror(env);
@@ -1689,14 +1654,7 @@ ftp_cmd_EPRT(ftp_env_t *env, const char *arg) {
       env, "501 Usage: EPRT <d><af><d><addr><d><port><d>\r\n");
   }
 
-  if(env->passive_fd >= 0) {
-    close(env->passive_fd);
-    env->passive_fd = -1;
-  }
-  if(env->data_fd >= 0) {
-    close(env->data_fd);
-    env->data_fd = -1;
-  }
+  ftp_close_data_fds(env);
 
   if((env->data_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     return ftp_perror(env);
@@ -2548,8 +2506,7 @@ int
 ftp_cmd_ABOR(ftp_env_t *env, const char *arg) {
   (void)arg;
   if(env->data_fd >= 0) {
-    close(env->data_fd);
-    env->data_fd = -1;
+    ftp_data_close(env);
     env->data_offset = 0;
     if(ftp_active_printf(env,
                          "426 Data connection closed; transfer aborted\r\n")) {
