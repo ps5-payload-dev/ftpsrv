@@ -28,6 +28,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -606,21 +607,6 @@ ftp_list_path_arg(const char *arg, char *buf, size_t bufsize) {
   return buf;
 }
 
-
-/**
- * Compare two strings case-insensitively.
- **/
-int
-ftp_strieq(const char *a, const char *b) {
-  while(*a && *b) {
-    if(tolower((unsigned char)*a) != tolower((unsigned char)*b)) {
-      return 0;
-    }
-    a++;
-    b++;
-  }
-  return *a == '\0' && *b == '\0';
-}
 
 static int
 ftp_format_mdtm(time_t t, char *buf, size_t bufsize) {
@@ -2356,11 +2342,11 @@ ftp_cmd_OPTS(ftp_env_t *env, const char *arg) {
   }
   val[len] = '\0';
 
-  if(ftp_strieq(opt, "UTF8")) {
-    if(!val[0] || ftp_strieq(val, "ON")) {
+  if(!strcasecmp(opt, "UTF8")) {
+    if(!val[0] || !strcasecmp(val, "ON")) {
       return ftp_active_printf(env, "200 UTF8 enabled\r\n");
     }
-    if(ftp_strieq(val, "OFF")) {
+    if(!strcasecmp(val, "OFF")) {
       return ftp_active_printf(env, "200 UTF8 disabled\r\n");
     }
     return ftp_active_printf(env, "501 Usage: OPTS UTF8 ON\r\n");

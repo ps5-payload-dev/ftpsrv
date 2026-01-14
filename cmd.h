@@ -147,4 +147,3 @@ int ftp_data_close(ftp_env_t *env);
 /**
  * Compare two strings case-insensitively.
  **/
-int ftp_strieq(const char *a, const char *b);
