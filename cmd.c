@@ -30,6 +30,7 @@ along with this program; see the file COPYING. If not, see
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #ifdef __linux__
 #include <sys/sysmacros.h>
@@ -987,6 +988,94 @@ ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
   }
 
   return ftp_active_printf(env, "200 OK\r\n");
+}
+
+/**
+ * Resolve an optional path and fetch filesystem stats.
+ **/
+static int
+ftp_get_vfs(ftp_env_t *env, const char *arg, struct statvfs *vfs_out) {
+  char pathbuf[PATH_MAX];
+  const char *path_arg = ftp_copy_path_arg(arg, pathbuf, sizeof(pathbuf));
+  const char *path = NULL;
+
+  if(!vfs_out) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if(path_arg) {
+    if(ftp_abspath(env, pathbuf, sizeof(pathbuf), path_arg)) {
+      return -1;
+    }
+    path = pathbuf;
+  } else {
+    if(ftp_normpath(env->cwd, pathbuf, sizeof(pathbuf))) {
+      return -1;
+    }
+    path = pathbuf;
+  }
+
+  if(statvfs(path, vfs_out)) {
+    return -1;
+  }
+  return 0;
+}
+
+/**
+ * Return available space for a path (AVBL).
+ **/
+int
+ftp_cmd_AVBL(ftp_env_t *env, const char* arg) {
+  struct statvfs vfs;
+  if(ftp_get_vfs(env, arg, &vfs)) {
+    return ftp_perror(env);
+  }
+  uintmax_t unit = vfs.f_frsize ? (uintmax_t)vfs.f_frsize
+                                : (uintmax_t)vfs.f_bsize;
+  uintmax_t avail = (uintmax_t)vfs.f_bavail * unit;
+  return ftp_active_printf(env, "213 %" PRIuMAX "\r\n", avail);
+}
+
+/**
+ * Return available space for a path (XQUOTA).
+ **/
+int
+ftp_cmd_XQUOTA(ftp_env_t *env, const char* arg) {
+  struct statvfs vfs;
+  if(ftp_get_vfs(env, arg, &vfs)) {
+    return ftp_perror(env);
+  }
+
+  uintmax_t block = vfs.f_frsize ? (uintmax_t)vfs.f_frsize
+                                 : (uintmax_t)vfs.f_bsize;
+  uintmax_t file_limit = (uintmax_t)vfs.f_files;
+  uintmax_t file_count = 0;
+  if(vfs.f_files >= vfs.f_ffree) {
+    file_count = (uintmax_t)(vfs.f_files - vfs.f_ffree);
+  }
+  uintmax_t disk_limit = (uintmax_t)vfs.f_blocks * block;
+  uintmax_t disk_usage = 0;
+  if(vfs.f_blocks >= vfs.f_bavail) {
+    disk_usage = (uintmax_t)(vfs.f_blocks - vfs.f_bavail) * block;
+  }
+
+  if(ftp_active_printf(env, "213-File and disk usage\r\n")) {
+    return -1;
+  }
+  if(ftp_active_printf(env, " File count: %" PRIuMAX "\r\n", file_count)) {
+    return -1;
+  }
+  if(ftp_active_printf(env, " File limit: %" PRIuMAX "\r\n", file_limit)) {
+    return -1;
+  }
+  if(ftp_active_printf(env, " Disk usage: %" PRIuMAX "\r\n", disk_usage)) {
+    return -1;
+  }
+  if(ftp_active_printf(env, " Disk limit: %" PRIuMAX "\r\n", disk_limit)) {
+    return -1;
+  }
+  return ftp_active_printf(env, "213 File and disk usage end\r\n");
 }
 
 
@@ -2598,6 +2687,8 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
                            "211-Features:\r\n"
                            " MLST type*;unique*;size*;modify*;unix.mode*;"
                            "unix.uid*;unix.gid*;\r\n"
+                           " AVBL\r\n"
+                           " XQUOTA\r\n"
                            " MLSD\r\n"
                            " UTF8\r\n"
                            " REST STREAM\r\n"
@@ -2778,9 +2869,9 @@ ftp_cmd_HELP(ftp_env_t *env, const char *arg) {
   (void)arg;
   return ftp_active_printf(env,
                            "214-Commands:\r\n"
-                           " USER PASS PWD CWD CDUP TYPE SIZE MDTM\r\n"
+                           " USER PASS PWD CWD CDUP TYPE SIZE MDTM AVBL\r\n"
                            " LIST NLST MLSD MLST RETR STOR APPE\r\n"
-                           " DELE RMD MKD RNFR RNTO REST\r\n"
+                           " DELE RMD MKD RNFR RNTO REST XQUOTA\r\n"
                            " PASV PORT EPSV EPRT SYST NOOP QUIT\r\n"
                            "214 End\r\n");
 }

@@ -86,6 +86,7 @@ int ftp_cmd_PASS(ftp_env_t *env, const char* arg);
 int ftp_cmd_FEAT(ftp_env_t *env, const char* arg);
 int ftp_cmd_OPTS(ftp_env_t *env, const char* arg);
 int ftp_cmd_MDTM(ftp_env_t *env, const char* arg);
+int ftp_cmd_AVBL(ftp_env_t *env, const char* arg);
 int ftp_cmd_MLST(ftp_env_t *env, const char* arg);
 int ftp_cmd_STAT(ftp_env_t *env, const char* arg);
 int ftp_cmd_HELP(ftp_env_t *env, const char* arg);
@@ -101,6 +102,7 @@ int ftp_cmd_ABOR(ftp_env_t *env, const char* arg);
 int ftp_cmd_KILL(ftp_env_t *env, const char* arg);
 int ftp_cmd_MTRW(ftp_env_t *env, const char* arg);
 int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
+int ftp_cmd_XQUOTA(ftp_env_t *env, const char* arg);
 int ftp_cmd_SELF(ftp_env_t *env, const char* arg);
 int ftp_cmd_SELFCHK(ftp_env_t *env, const char* arg);
 

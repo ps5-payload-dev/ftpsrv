@@ -89,6 +89,7 @@ static ftp_command_t commands[] = {
   {"USER", ftp_cmd_USER},
   {"ABOR", ftp_cmd_ABOR},
   {"ALLO", ftp_cmd_ALLO},
+  {"AVBL", ftp_cmd_AVBL},
   {"FEAT", ftp_cmd_FEAT},
   {"HELP", ftp_cmd_HELP},
   {"MDTM", ftp_cmd_MDTM},
@@ -103,6 +104,7 @@ static ftp_command_t commands[] = {
   {"SELF", ftp_cmd_SELF},
   {"SCHK", ftp_cmd_SELFCHK},
   {"CHMOD", ftp_cmd_CHMOD},
+  {"XQUOTA", ftp_cmd_XQUOTA},
 
   // duplicates that ensure commands are 4 bytes long
   {"XCUP", ftp_cmd_CDUP},
