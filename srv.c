@@ -104,6 +104,7 @@ static ftp_command_t commands[] = {
   {"SELF", ftp_cmd_SELF},
   {"SCHK", ftp_cmd_SELFCHK},
   {"CHMOD", ftp_cmd_CHMOD},
+  {"UMASK", ftp_cmd_UMASK},
   {"XQUOTA", ftp_cmd_XQUOTA},
 
   // duplicates that ensure commands are 4 bytes long

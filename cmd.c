@@ -991,6 +991,36 @@ ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
 }
 
 /**
+ * Get or set the process umask (UMASK).
+ **/
+int
+ftp_cmd_UMASK(ftp_env_t *env, const char* arg) {
+  (void)env;
+
+  while(*arg == ' ') {
+    arg++;
+  }
+
+  if(!*arg) {
+    mode_t old = umask(0);
+    umask(old);
+    return ftp_active_printf(env, "200 UMASK %03o\r\n", old & 0777);
+  }
+
+  char *end = NULL;
+  long mode = strtol(arg, &end, 8);
+  while(end && *end == ' ') {
+    end++;
+  }
+  if(end == arg || (end && *end) || mode < 0 || mode > 0777) {
+    return ftp_active_printf(env, "501 Usage: UMASK <MODE>\r\n");
+  }
+
+  umask((mode_t)mode);
+  return ftp_active_printf(env, "200 UMASK set to %03o\r\n", (int)mode);
+}
+
+/**
  * Resolve an optional path and fetch filesystem stats.
  **/
 static int
@@ -2690,6 +2720,8 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
                            " AVBL\r\n"
                            " XQUOTA\r\n"
                            " MLSD\r\n"
+                           " SITE CHMOD\r\n"
+                           " SITE UMASK\r\n"
                            " UTF8\r\n"
                            " REST STREAM\r\n"
                            "211 End\r\n");
@@ -2873,6 +2905,7 @@ ftp_cmd_HELP(ftp_env_t *env, const char *arg) {
                            " LIST NLST MLSD MLST RETR STOR APPE\r\n"
                            " DELE RMD MKD RNFR RNTO REST XQUOTA\r\n"
                            " PASV PORT EPSV EPRT SYST NOOP QUIT\r\n"
+                           " SITE CHMOD UMASK\r\n"
                            "214 End\r\n");
 }
 
