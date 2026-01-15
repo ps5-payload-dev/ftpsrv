@@ -1021,6 +1021,78 @@ ftp_cmd_UMASK(ftp_env_t *env, const char* arg) {
 }
 
 /**
+ * Create a symlink (SYMLINK <TARGET> <LINK>).
+ **/
+int
+ftp_cmd_SYMLINK(ftp_env_t *env, const char* arg) {
+  char target_arg[PATH_MAX + 1];
+  char link_arg[PATH_MAX + 1];
+  char target_path[PATH_MAX];
+  char link_path[PATH_MAX];
+  const char *p = arg;
+
+  while(*p == ' ') {
+    p++;
+  }
+  if(!*p) {
+    return ftp_active_printf(env, "501 Usage: SYMLINK <TARGET> <LINK>\r\n");
+  }
+
+  const char *sep = strchr(p, ' ');
+  if(!sep) {
+    return ftp_active_printf(env, "501 Usage: SYMLINK <TARGET> <LINK>\r\n");
+  }
+
+  size_t target_len = (size_t)(sep - p);
+  if(target_len == 0 || target_len >= sizeof(target_arg)) {
+    errno = ENAMETOOLONG;
+    return ftp_perror(env);
+  }
+  memcpy(target_arg, p, target_len);
+  target_arg[target_len] = '\0';
+
+  p = sep;
+  while(*p == ' ') {
+    p++;
+  }
+  if(!*p) {
+    return ftp_active_printf(env, "501 Usage: SYMLINK <TARGET> <LINK>\r\n");
+  }
+
+  const char *end = p + strlen(p);
+  while(end > p && end[-1] == ' ') {
+    end--;
+  }
+  size_t link_len = (size_t)(end - p);
+  if(link_len == 0 || link_len >= sizeof(link_arg)) {
+    errno = ENAMETOOLONG;
+    return ftp_perror(env);
+  }
+  memcpy(link_arg, p, link_len);
+  link_arg[link_len] = '\0';
+
+  if(ftp_abspath(env, target_path, sizeof(target_path), target_arg)) {
+    return ftp_perror(env);
+  }
+  if(ftp_abspath(env, link_path, sizeof(link_path), link_arg)) {
+    return ftp_perror(env);
+  }
+
+  if(symlink(target_path, link_path)) {
+    if(errno == 0) {
+#ifdef EOPNOTSUPP
+      errno = EOPNOTSUPP;
+#else
+      errno = EIO;
+#endif
+    }
+    return ftp_perror(env);
+  }
+
+  return ftp_active_printf(env, "200 SYMLINK created\r\n");
+}
+
+/**
  * Resolve an optional path and fetch filesystem stats.
  **/
 static int
@@ -2722,6 +2794,7 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
                            " MLSD\r\n"
                            " SITE CHMOD\r\n"
                            " SITE UMASK\r\n"
+                           " SITE SYMLINK\r\n"
                            " UTF8\r\n"
                            " REST STREAM\r\n"
                            "211 End\r\n");
@@ -2905,7 +2978,7 @@ ftp_cmd_HELP(ftp_env_t *env, const char *arg) {
                            " LIST NLST MLSD MLST RETR STOR APPE\r\n"
                            " DELE RMD MKD RNFR RNTO REST XQUOTA\r\n"
                            " PASV PORT EPSV EPRT SYST NOOP QUIT\r\n"
-                           " SITE CHMOD UMASK\r\n"
+                           " SITE CHMOD UMASK SYMLINK\r\n"
                            "214 End\r\n");
 }
 
