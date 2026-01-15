@@ -35,6 +35,9 @@ along with this program; see the file COPYING. If not, see
 #endif
 
 
+/**
+ * Read exactly n bytes unless an error occurs.
+ **/
 int
 io_nread(int fd, void* buf, size_t n) {
   size_t off = 0;
@@ -58,6 +61,9 @@ io_nread(int fd, void* buf, size_t n) {
 }
 
 
+/**
+ * Write exactly n bytes unless an error occurs.
+ **/
 int
 io_nwrite(int fd, const void* buf, size_t n) {
   size_t off = 0;
@@ -81,6 +87,9 @@ io_nwrite(int fd, const void* buf, size_t n) {
 }
 
 
+/**
+ * Copy a fixed number of bytes using a temporary buffer.
+ **/
 int
 io_ncopy(int fd_in, int fd_out, size_t size) {
   size_t copied = 0;
@@ -114,6 +123,9 @@ io_ncopy(int fd_in, int fd_out, size_t size) {
 }
 
 
+/**
+ * Read exactly n bytes from an offset unless an error occurs.
+ **/
 int
 io_pread(int fd, void* buf, size_t n, off_t off) {
   size_t done = 0;
@@ -137,6 +149,9 @@ io_pread(int fd, void* buf, size_t n, off_t off) {
 }
 
 
+/**
+ * Write exactly n bytes to an offset unless an error occurs.
+ **/
 int
 io_pwrite(int fd, const void* buf, size_t n, off_t off) {
   size_t done = 0;
@@ -161,6 +176,9 @@ io_pwrite(int fd, const void* buf, size_t n, off_t off) {
 }
 
 
+/**
+ * Copy a fixed number of bytes using pread/pwrite.
+ **/
 int
 io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t size) {
   size_t copied = 0;
@@ -195,6 +213,9 @@ io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t size) {
   return 0;
 }
 
+/**
+ * Copy a fixed number of bytes using a caller-provided buffer.
+ **/
 int
 io_ncopy_buf(int fd_in, int fd_out, size_t size, void* buf, size_t bufsize) {
   size_t copied = 0;
@@ -224,6 +245,9 @@ io_ncopy_buf(int fd_in, int fd_out, size_t size, void* buf, size_t bufsize) {
   return 0;
 }
 
+/**
+ * Configure socket buffers, timeouts, and keepalive settings.
+ **/
 int
 io_set_socket_opts(int fd, int is_data) {
   int rc = 0;
@@ -251,8 +275,7 @@ io_set_socket_opts(int fd, int is_data) {
 
 #ifdef SO_KEEPALIVE
   if(!is_data) {
-    int one = 1;
-    (void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
+    (void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE,  &(int){1}, sizeof(int));
 
     #ifdef TCP_KEEPIDLE
       int idle = 30;
@@ -271,8 +294,7 @@ io_set_socket_opts(int fd, int is_data) {
 
 #ifdef TCP_NODELAY
   if(!is_data) {
-    int one = 1;
-    if(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) < 0) {
+    if(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,  &(int){1}, sizeof(int)) < 0) {
       rc = -1;
     }
   }

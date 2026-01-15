@@ -157,6 +157,9 @@ ftp_reader_fill(ftp_reader_t *reader) {
   return 0;
 }
 
+/**
+ * Read a CRLF-terminated line from the control socket.
+ **/
 static char*
 ftp_readline(ftp_reader_t *reader) {
   int bufsize = 1024;
@@ -233,6 +236,9 @@ ftp_readline(ftp_reader_t *reader) {
   }
 }
 
+/**
+ * Case-insensitive prefix match for a fixed length.
+ **/
 static int
 ftp_prefix_ieq(const char *s, const char *prefix, size_t n) {
   for(size_t i = 0; i < n; i++) {
@@ -304,9 +310,9 @@ ftp_greet(ftp_env_t *env) {
 
   snprintf(msg, sizeof(msg),
            "220-Welcome to ftpsrv.elf running on pid %d\r\n"
-           "220-Version: %s (built %s %s)\r\n",
+           "220-Version: %s (built %s %s)\r\n"
+           "220 Service is ready\r\n",
            getpid(), VERSION_TAG, __DATE__, __TIME__);
-  strncat(msg, "220 Service is ready\r\n", sizeof(msg)-1);
 
   len = strlen(msg);
   if(io_nwrite(env->active_fd, msg, len)) {
