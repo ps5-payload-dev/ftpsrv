@@ -83,6 +83,7 @@ static ftp_command_t commands[] = {
   {"RNFR", ftp_cmd_RNFR},
   {"RNTO", ftp_cmd_RNTO},
   {"SIZE", ftp_cmd_SIZE},
+  {"DSIZ", ftp_cmd_DSIZ},
   {"STOR", ftp_cmd_STOR},
   {"SYST", ftp_cmd_SYST},
   {"TYPE", ftp_cmd_TYPE},

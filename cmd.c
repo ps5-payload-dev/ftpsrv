@@ -1473,6 +1473,73 @@ ftp_join_path(char *dst, size_t dst_sz, const char *dir_path, const char *name) 
   return 0;
 }
 
+/**
+ * Recursively compute the size of a directory.
+ **/
+static int
+ftp_dir_size(const char *path, uintmax_t *size_out) {
+  DIR *dir = opendir(path);
+  if(!dir) {
+    return -1;
+  }
+
+  struct dirent *ent;
+  while((ent = readdir(dir)) != NULL) {
+    if(ent->d_name[0] == '.' &&
+       (ent->d_name[1] == '\0' ||
+        (ent->d_name[1] == '.' && ent->d_name[2] == '\0'))) {
+      continue;
+    }
+
+    char child[PATH_MAX];
+    if(ftp_join_path(child, sizeof(child), path, ent->d_name) != 0) {
+      int err = errno;
+      closedir(dir);
+      errno = err;
+      return -1;
+    }
+
+    struct stat st;
+    if(lstat(child, &st)) {
+      int err = errno;
+      closedir(dir);
+      errno = err;
+      return -1;
+    }
+
+    if(S_ISDIR(st.st_mode)) {
+      if(ftp_dir_size(child, size_out)) {
+        int err = errno;
+        closedir(dir);
+        errno = err;
+        return -1;
+      }
+      continue;
+    }
+
+    if(S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
+      if(UINTMAX_MAX - *size_out < (uintmax_t)st.st_size) {
+        int err = EOVERFLOW;
+        closedir(dir);
+        errno = err;
+        return -1;
+      }
+      *size_out += (uintmax_t)st.st_size;
+      continue;
+    }
+
+    int err = EINVAL;
+    closedir(dir);
+    errno = err;
+    return -1;
+  }
+
+  if(closedir(dir)) {
+    return -1;
+  }
+  return 0;
+}
+
 typedef struct {
   char *argbuf;
   char *list_path;
@@ -3280,6 +3347,41 @@ ftp_cmd_COPY(ftp_env_t *env, const char* arg) {
 
 
 /**
+ * Obtain the size of a given file or directory.
+ **/
+int
+ftp_cmd_DSIZ(ftp_env_t *env, const char* arg) {
+  char pathbuf[PATH_MAX];
+  struct stat st;
+  uintmax_t size = 0;
+
+  if(!arg[0]) {
+    return ftp_active_printf(env, "501 Usage: DSIZ <PATH>\r\n");
+  }
+
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_active_printf(env, "550 %s: %s.\r\n", arg, strerror(errno));
+  }
+
+  if(stat(pathbuf, &st)) {
+    return ftp_active_printf(env, "550 %s: %s.\r\n", arg, strerror(errno));
+  }
+
+  if(S_ISREG(st.st_mode)) {
+    return ftp_active_printf(env, "550 %s: Is a file.\r\n", arg);
+  }
+  if(!S_ISDIR(st.st_mode)) {
+    return ftp_active_printf(env, "550 %s: Not a directory.\r\n", arg);
+  }
+
+  if(ftp_dir_size(pathbuf, &size)) {
+    return ftp_active_printf(env, "550 %s: %s.\r\n", arg, strerror(errno));
+  }
+
+  return ftp_active_printf(env, "213 %" PRIuMAX "\r\n", size);
+}
+
+/**
  * Obtain the size of a given file.
  **/
 int
@@ -3598,6 +3700,7 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
                            " MLSD\r\n"
                            " MDTM\r\n"
                            " SIZE\r\n"
+                           " DSIZ\r\n"
                            " EPSV\r\n"
                            " EPRT\r\n"
                            " KILL\r\n"
@@ -3789,7 +3892,7 @@ ftp_cmd_HELP(ftp_env_t *env, const char *arg) {
   (void)arg;
   return ftp_active_printf(env,
                            "214-Commands:\r\n"
-                           " USER PASS PWD CWD CDUP TYPE SIZE MDTM AVBL\r\n"
+                           " USER PASS PWD CWD CDUP TYPE SIZE DSIZ MDTM AVBL\r\n"
                            " LIST NLST MLSD MLST RETR STOR APPE\r\n"
                            " DELE RMD MKD RNFR RNTO REST XQUOTA\r\n"
                            " PASV PORT EPSV EPRT SYST NOOP QUIT\r\n"
