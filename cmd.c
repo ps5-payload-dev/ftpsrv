@@ -1540,6 +1540,82 @@ ftp_dir_size(const char *path, uintmax_t *size_out) {
   return 0;
 }
 
+/**
+ * Recursively delete a directory and its contents.
+ **/
+static int
+ftp_rmda_delete_dir(const char *path, int *err_out) {
+  DIR *dir = opendir(path);
+  if(!dir) {
+    if(!*err_out) {
+      *err_out = errno;
+    }
+    return -1;
+  }
+
+  int failed = 0;
+  struct dirent *ent;
+  while((ent = readdir(dir)) != NULL) {
+    if(ent->d_name[0] == '.' &&
+       (ent->d_name[1] == '\0' ||
+        (ent->d_name[1] == '.' && ent->d_name[2] == '\0'))) {
+      continue;
+    }
+
+    char child[PATH_MAX];
+    if(ftp_join_path(child, sizeof(child), path, ent->d_name) != 0) {
+      if(!*err_out) {
+        *err_out = errno;
+      }
+      failed = 1;
+      continue;
+    }
+
+    struct stat st;
+    if(lstat(child, &st)) {
+      if(!*err_out) {
+        *err_out = errno;
+      }
+      failed = 1;
+      continue;
+    }
+
+    if(S_ISDIR(st.st_mode)) {
+      if(ftp_rmda_delete_dir(child, err_out)) {
+        failed = 1;
+      }
+      continue;
+    }
+
+    if(unlink(child)) {
+      if(!*err_out) {
+        *err_out = errno;
+      }
+      failed = 1;
+    }
+  }
+
+  if(closedir(dir)) {
+    if(!*err_out) {
+      *err_out = errno;
+    }
+    failed = 1;
+  }
+
+  if(failed) {
+    return -1;
+  }
+
+  if(rmdir(path)) {
+    if(!*err_out) {
+      *err_out = errno;
+    }
+    return -1;
+  }
+
+  return 0;
+}
+
 typedef struct {
   char *argbuf;
   char *list_path;
@@ -2488,6 +2564,44 @@ ftp_cmd_RMD(ftp_env_t *env, const char* arg) {
   }
 
   return ftp_active_printf(env, "250 Directory deleted\r\n");
+}
+
+/**
+ * Remove a directory and its contents.
+ **/
+int
+ftp_cmd_RMDA(ftp_env_t *env, const char* arg) {
+  char pathbuf[PATH_MAX];
+  struct stat st;
+  int err = 0;
+
+  if(!arg[0]) {
+    return ftp_active_printf(env, "501 Usage: RMDA <DIRNAME>\r\n");
+  }
+
+  if(ftp_abspath(env, pathbuf, sizeof(pathbuf), arg)) {
+    return ftp_active_printf(env, "550 %s: %s.\r\n", arg, strerror(errno));
+  }
+
+  if(stat(pathbuf, &st)) {
+    return ftp_active_printf(env, "550 %s: %s.\r\n", arg, strerror(errno));
+  }
+
+  if(S_ISREG(st.st_mode)) {
+    return ftp_active_printf(env, "550 %s: Is a file.\r\n", arg);
+  }
+  if(!S_ISDIR(st.st_mode)) {
+    return ftp_active_printf(env, "550 %s: Not a directory.\r\n", arg);
+  }
+
+  if(ftp_rmda_delete_dir(pathbuf, &err)) {
+    if(err) {
+      errno = err;
+    }
+    return ftp_active_printf(env, "550 %s: %s.\r\n", arg, strerror(errno));
+  }
+
+  return ftp_active_printf(env, "250 RMDA command successful.\r\n");
 }
 
 
@@ -3701,6 +3815,7 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
                            " MDTM\r\n"
                            " SIZE\r\n"
                            " DSIZ\r\n"
+                           " RMDA\r\n"
                            " EPSV\r\n"
                            " EPRT\r\n"
                            " KILL\r\n"
@@ -3710,6 +3825,7 @@ ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
                            " SITE CHMOD\r\n"
                            " SITE UMASK\r\n"
                            " SITE SYMLINK\r\n"
+                           " SITE RMDIR\r\n"
                            " SITE CPFR\r\n"
                            " SITE CPTO\r\n"
                            " SITE COPY\r\n"
@@ -3894,9 +4010,9 @@ ftp_cmd_HELP(ftp_env_t *env, const char *arg) {
                            "214-Commands:\r\n"
                            " USER PASS PWD CWD CDUP TYPE SIZE DSIZ MDTM AVBL\r\n"
                            " LIST NLST MLSD MLST RETR STOR APPE\r\n"
-                           " DELE RMD MKD RNFR RNTO REST XQUOTA\r\n"
+                           " DELE RMD RMDA MKD RNFR RNTO REST XQUOTA\r\n"
                            " PASV PORT EPSV EPRT SYST NOOP QUIT\r\n"
-                           " SITE CHMOD UMASK SYMLINK CPFR CPTO COPY\r\n"
+                           " SITE CHMOD UMASK SYMLINK RMDIR CPFR CPTO COPY\r\n"
                            "214 End\r\n");
 }
 

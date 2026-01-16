@@ -83,6 +83,7 @@ int ftp_cmd_QUIT(ftp_env_t *env, const char* arg);
 int ftp_cmd_REST(ftp_env_t *env, const char* arg);
 int ftp_cmd_RETR(ftp_env_t *env, const char* arg);
 int ftp_cmd_RMD (ftp_env_t *env, const char* arg);
+int ftp_cmd_RMDA(ftp_env_t *env, const char* arg);
 int ftp_cmd_RNFR(ftp_env_t *env, const char* arg);
 int ftp_cmd_RNTO(ftp_env_t *env, const char* arg);
 int ftp_cmd_SIZE(ftp_env_t *env, const char* arg);
