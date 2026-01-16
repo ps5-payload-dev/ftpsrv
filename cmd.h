@@ -19,6 +19,7 @@ along with this program; see the file COPYING. If not, see
 #include <limits.h>
 #include <netinet/in.h>
 #include <stddef.h>
+#include <pthread.h>
 #include <unistd.h>
 
 #ifndef FTP_LISTEN_BACKLOG
@@ -42,6 +43,13 @@ typedef struct ftp_env {
   int data_offset_is_rest;
   char rename_path[PATH_MAX];
   int rename_ready;
+  char copy_path[PATH_MAX];
+  int copy_ready;
+  pthread_mutex_t ctrl_mutex;
+  pthread_mutex_t copy_mutex;
+  pthread_t copy_thread;
+  int copy_in_progress;
+  int copy_thread_valid;
   struct sockaddr_in data_addr;
   void *xfer_buf;
   size_t xfer_buf_size;
@@ -104,6 +112,9 @@ int ftp_cmd_MTRW(ftp_env_t *env, const char* arg);
 int ftp_cmd_CHMOD(ftp_env_t *env, const char* arg);
 int ftp_cmd_UMASK(ftp_env_t *env, const char* arg);
 int ftp_cmd_SYMLINK(ftp_env_t *env, const char* arg);
+int ftp_cmd_CPFR(ftp_env_t *env, const char* arg);
+int ftp_cmd_CPTO(ftp_env_t *env, const char* arg);
+int ftp_cmd_COPY(ftp_env_t *env, const char* arg);
 int ftp_cmd_XQUOTA(ftp_env_t *env, const char* arg);
 int ftp_cmd_SELF(ftp_env_t *env, const char* arg);
 int ftp_cmd_SELFCHK(ftp_env_t *env, const char* arg);

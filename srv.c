@@ -106,6 +106,9 @@ static ftp_command_t commands[] = {
   {"CHMOD", ftp_cmd_CHMOD},
   {"UMASK", ftp_cmd_UMASK},
   {"SYMLINK", ftp_cmd_SYMLINK},
+  {"CPFR", ftp_cmd_CPFR},
+  {"CPTO", ftp_cmd_CPTO},
+  {"COPY", ftp_cmd_COPY},
   {"XQUOTA", ftp_cmd_XQUOTA},
 
   // duplicates that ensure commands are 4 bytes long
@@ -348,9 +351,16 @@ ftp_thread(void *args) {
   env.self2elf    = 0;
   env.self_verify = 1;
   env.rename_ready = 0;
+  env.copy_ready = 0;
+  env.copy_in_progress = 0;
+  env.copy_thread_valid = 0;
+
+  pthread_mutex_init(&env.ctrl_mutex, NULL);
+  pthread_mutex_init(&env.copy_mutex, NULL);
 
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));
+  memset(env.copy_path, 0, sizeof(env.copy_path));
   memset(&env.data_addr, 0, sizeof(env.data_addr));
   env.xfer_buf_size = IO_COPY_BUFSIZE;
   env.xfer_buf = malloc(env.xfer_buf_size);
@@ -390,6 +400,10 @@ ftp_thread(void *args) {
     free(line);
   }
 
+  if(env.copy_thread_valid) {
+    pthread_join(env.copy_thread, NULL);
+  }
+
   if(env.active_fd >= 0) {
     close(env.active_fd);
   }
@@ -405,6 +419,9 @@ ftp_thread(void *args) {
   if(env.xfer_buf) {
     free(env.xfer_buf);
   }
+
+  pthread_mutex_destroy(&env.copy_mutex);
+  pthread_mutex_destroy(&env.ctrl_mutex);
 
   pthread_exit(NULL);
 
