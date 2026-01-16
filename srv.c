@@ -80,15 +80,18 @@ static ftp_command_t commands[] = {
   {"REST", ftp_cmd_REST},
   {"RETR", ftp_cmd_RETR},
   {"RMD",  ftp_cmd_RMD},
+  {"RMDA", ftp_cmd_RMDA},
   {"RNFR", ftp_cmd_RNFR},
   {"RNTO", ftp_cmd_RNTO},
   {"SIZE", ftp_cmd_SIZE},
+  {"DSIZ", ftp_cmd_DSIZ},
   {"STOR", ftp_cmd_STOR},
   {"SYST", ftp_cmd_SYST},
   {"TYPE", ftp_cmd_TYPE},
   {"USER", ftp_cmd_USER},
   {"ABOR", ftp_cmd_ABOR},
   {"ALLO", ftp_cmd_ALLO},
+  {"AVBL", ftp_cmd_AVBL},
   {"FEAT", ftp_cmd_FEAT},
   {"HELP", ftp_cmd_HELP},
   {"MDTM", ftp_cmd_MDTM},
@@ -103,6 +106,13 @@ static ftp_command_t commands[] = {
   {"SELF", ftp_cmd_SELF},
   {"SCHK", ftp_cmd_SELFCHK},
   {"CHMOD", ftp_cmd_CHMOD},
+  {"UMASK", ftp_cmd_UMASK},
+  {"SYMLINK", ftp_cmd_SYMLINK},
+  {"RMDIR", ftp_cmd_RMDA},
+  {"CPFR", ftp_cmd_CPFR},
+  {"CPTO", ftp_cmd_CPTO},
+  {"COPY", ftp_cmd_COPY},
+  {"XQUOTA", ftp_cmd_XQUOTA},
 
   // duplicates that ensure commands are 4 bytes long
   {"XCUP", ftp_cmd_CDUP},
@@ -157,6 +167,9 @@ ftp_reader_fill(ftp_reader_t *reader) {
   return 0;
 }
 
+/**
+ * Read a CRLF-terminated line from the control socket.
+ **/
 static char*
 ftp_readline(ftp_reader_t *reader) {
   int bufsize = 1024;
@@ -233,6 +246,9 @@ ftp_readline(ftp_reader_t *reader) {
   }
 }
 
+/**
+ * Case-insensitive prefix match for a fixed length.
+ **/
 static int
 ftp_prefix_ieq(const char *s, const char *prefix, size_t n) {
   for(size_t i = 0; i < n; i++) {
@@ -270,6 +286,13 @@ ftp_execute(ftp_env_t *env, char *line) {
   while(*arg == ' ') {
     arg++;
   }
+  if(*arg) {
+    char *end = arg + strlen(arg);
+    while(end > arg && end[-1] == ' ') {
+      end--;
+    }
+    *end = '\0';
+  }
 
   for(char *p = line; *p; p++) {
     *p = (char)toupper((unsigned char)*p);
@@ -292,13 +315,14 @@ ftp_execute(ftp_env_t *env, char *line) {
  **/
 static int
 ftp_greet(ftp_env_t *env) {
-  char msg[0x100];
+  char msg[0x200];
   size_t len;
 
   snprintf(msg, sizeof(msg),
-	   "220-Welcome to ftpsrv.elf running on pid %d, compiled at %s %s\r\n",
-                         getpid(), __DATE__, __TIME__);
-  strncat(msg, "220 Service is ready\r\n", sizeof(msg)-1);
+           "220-Welcome to ftpsrv.elf running on pid %d\r\n"
+           "220-Version: %s (built %s %s)\r\n"
+           "220 Service is ready\r\n",
+           getpid(), VERSION_TAG, __DATE__, __TIME__);
 
   len = strlen(msg);
   if(io_nwrite(env->active_fd, msg, len)) {
@@ -329,9 +353,17 @@ ftp_thread(void *args) {
   env.data_offset_is_rest = 0;
   env.self2elf    = 0;
   env.self_verify = 1;
+  env.rename_ready = 0;
+  env.copy_ready = 0;
+  env.copy_in_progress = 0;
+  env.copy_thread_valid = 0;
+
+  pthread_mutex_init(&env.ctrl_mutex, NULL);
+  pthread_mutex_init(&env.copy_mutex, NULL);
 
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));
+  memset(env.copy_path, 0, sizeof(env.copy_path));
   memset(&env.data_addr, 0, sizeof(env.data_addr));
   env.xfer_buf_size = IO_COPY_BUFSIZE;
   env.xfer_buf = malloc(env.xfer_buf_size);
@@ -371,6 +403,10 @@ ftp_thread(void *args) {
     free(line);
   }
 
+  if(env.copy_thread_valid) {
+    pthread_join(env.copy_thread, NULL);
+  }
+
   if(env.active_fd >= 0) {
     close(env.active_fd);
   }
@@ -386,6 +422,9 @@ ftp_thread(void *args) {
   if(env.xfer_buf) {
     free(env.xfer_buf);
   }
+
+  pthread_mutex_destroy(&env.copy_mutex);
+  pthread_mutex_destroy(&env.ctrl_mutex);
 
   pthread_exit(NULL);
 

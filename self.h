@@ -92,7 +92,6 @@ void* self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind);
 /**
  * Extract the ELF embedded within the given SELF.
  **/
-int self_extract_elf(int self_fd, int elf_fd);
 int self_extract_elf_ex(int self_fd, int elf_fd, int verify);
 
 
