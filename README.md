@@ -10,11 +10,30 @@ PS4 and PS5 (executed without prepending SITE). In particular:
  - KILL - kill the FTP server.
  - MTRW - remount /system and /system_ex with write permissions.
  - SELF - toggle on-the-fly SELF to ELF decryption (enabled by default).
+ - SCHK - toggle SELF digest verification.
 
 Note: the SELF command operates on induvidual connections so use e.g.,
 ```console
 john@localhost:ftpsrv$ curl -o libkernel.sprx -Q SELF ftp://ps5:2121/system/common/lib/libkernel.sprx
 ```
+
+## Additional commands
+These commands are implemented but were not previously documented here:
+ - DSIZ <path> - report recursive directory size (errors if path is a file).
+ - RMDA <dir> - delete a directory tree (alias: SITE RMDIR).
+ - AVBL <path> - available space in bytes for the given path.
+ - XQUOTA - report file count/limits and disk usage/limits.
+ - SITE CHMOD <mode> <path> - change permissions.
+ - SITE UMASK [mode] - get/set file creation mask.
+ - SITE SYMLINK <target> <link> - create a symlink.
+ - SITE CPFR <from> / SITE CPTO <to> - server-side copy (asynchronous).
+ - SITE COPY <from> <to> - server-side copy (asynchronous).
+
+Note: the copy commands return immediately with "250 Copy started in background";
+errors during the background copy are not reported to the client.
+
+Some clients (e.g. WinSCP) can be configured to use these extra commands
+for file management operations.
 
 ## Building for the PS4
 Assuming you have the [ps4-payload-sdk][sdk-ps4] installed on a POSIX machine,
