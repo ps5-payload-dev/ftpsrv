@@ -27,7 +27,10 @@ int
 io_nread(int fd, void* buf, size_t n) {
   int r;
 
-  if((r=read(fd, buf, n)) < 0) {
+  while((r=read(fd, buf, n)) < 0) {
+    if(errno == EINTR) {
+      continue;
+    }
     return -1;
   }
 
@@ -44,7 +47,10 @@ int
 io_nwrite(int fd, const void* buf, size_t n) {
   int r;
 
-  if((r=write(fd, buf, n)) < 0) {
+  while((r=write(fd, buf, n)) < 0) {
+    if(errno == EINTR) {
+      continue;
+    }
     return -1;
   }
 
@@ -94,7 +100,10 @@ int
 io_pread(int fd, void* buf, size_t n, off_t off) {
   int r;
 
-  if((r=pread(fd, buf, n, off)) < 0) {
+  while((r=pread(fd, buf, n, off)) < 0) {
+    if(errno == EINTR) {
+      continue;
+    }
     return -1;
   }
 
@@ -111,7 +120,10 @@ int
 io_pwrite(int fd, const void* buf, size_t n, off_t off) {
   int r;
 
-  if((r=pwrite(fd, buf, n, off)) < 0) {
+  while((r=pwrite(fd, buf, n, off)) < 0) {
+    if(errno == EINTR) {
+      continue;
+    }
     return -1;
   }
 
