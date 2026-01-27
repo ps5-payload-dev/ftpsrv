@@ -292,7 +292,7 @@ ftp_serve(uint16_t port, int notify_user) {
     puts("||  _| | |_  | |_) | \\__ \\ | |     \\ V /   _  |  __/ | | |  _||");
     puts("||_|    \\__| | .__/  |___/ |_|      \\_/   (_)  \\___| |_| |_|  |");
     puts("|            |_|                                              |");
-    printf("| %-26s Copyright (C) 2025 John Törnblom |\n", VERSION_TAG);
+    printf("| %-16s Copyright (C) 2025 John Törnblom & drakmor |\n", VERSION_TAG);
     puts("'-------------------------------------------------------------'");
   }
 
