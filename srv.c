@@ -26,6 +26,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "cmd.h"
 #include "io.h"
@@ -161,7 +162,7 @@ ftp_execute(ftp_env_t *env, char *line) {
   }
 
   for(int i=0; i<nb_ftp_commands; i++) {
-    if(strcmp(line, commands[i].name)) {
+    if(strcasecmp(line, commands[i].name)) {
       continue;
     }
 
@@ -237,7 +238,7 @@ ftp_thread(void *args) {
     }
 
     cmd = line;
-    if(!strncmp(line, "SITE ", 5)) {
+    if(!strncasecmp(line, "SITE ", 5)) {
       cmd += 5;
     }
 
