@@ -177,13 +177,14 @@ ftp_execute(ftp_env_t *env, char *line) {
  **/
 static int
 ftp_greet(ftp_env_t *env) {
-  char msg[0x100];
+  char msg[0x200];
   size_t len;
 
   snprintf(msg, sizeof(msg),
-	   "220-Welcome to ftpsrv.elf running on pid %d, compiled at %s %s\r\n",
-	   getpid(), __DATE__, __TIME__);
-  strncat(msg, "220 Service is ready\r\n", sizeof(msg)-1);
+           "220-Welcome to ftpsrv.elf running on pid %d\r\n"
+           "220-Version: %s (built %s %s)\r\n"
+           "220 Service is ready\r\n",
+           getpid(), VERSION_TAG, __DATE__, __TIME__);
 
   len = strlen(msg);
   if(io_nwrite(env->active_fd, msg, len)) {
