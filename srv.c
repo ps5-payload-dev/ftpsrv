@@ -298,7 +298,7 @@ ftp_serve(uint16_t port, int notify_user) {
 
   if(getifaddrs(&ifaddr) == -1) {
     FTP_LOG_PERROR("getifaddrs");
-    exit(EXIT_FAILURE);
+    return -1;
   }
 
   // Enumerate all AF_INET IPs
@@ -344,6 +344,7 @@ ftp_serve(uint16_t port, int notify_user) {
 
   if(setsockopt(srvfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
     FTP_LOG_PERROR("setsockopt");
+    close(srvfd);
     return -1;
   }
 
@@ -354,11 +355,13 @@ ftp_serve(uint16_t port, int notify_user) {
 
   if(bind(srvfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
     FTP_LOG_PERROR("bind");
+    close(srvfd);
     return -1;
   }
 
   if(listen(srvfd, SOMAXCONN) != 0) {
     FTP_LOG_PERROR("listen");
+    close(srvfd);
     return -1;
   }
 
