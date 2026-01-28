@@ -511,8 +511,6 @@ ftp_serve(uint16_t port, int notify_user) {
     return -1;
   }
 
-  addr_len = sizeof(client_addr);
-
   if(!pthread_attr_init(&attr)) {
     size_t stack_size = 512 * 1024;
     use_attr = 1;
@@ -526,7 +524,11 @@ ftp_serve(uint16_t port, int notify_user) {
   }
 
   while(1) {
+    addr_len = sizeof(client_addr);
     if((connfd=accept(srvfd, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
+      if(errno == EINTR) {
+        continue;
+      }
       FTP_LOG_PERROR("accept");
       break;
     }

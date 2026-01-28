@@ -166,8 +166,11 @@ ftp_data_open(ftp_env_t *env) {
         return -1;
       }
     }
-    if(connect(env->data_fd, (struct sockaddr*)&env->data_addr,
-               sizeof(env->data_addr))) {
+    while(connect(env->data_fd, (struct sockaddr*)&env->data_addr,
+                  sizeof(env->data_addr)) != 0) {
+      if(errno == EINTR) {
+        continue;
+      }
       ftp_data_close(env);
       return -1;
     }
@@ -177,8 +180,15 @@ ftp_data_open(ftp_env_t *env) {
       return -1;
     }
     addr_len = sizeof(data_addr);
-    if((env->data_fd=accept(env->passive_fd, (struct sockaddr*)&data_addr,
-                              &addr_len)) < 0) {
+    for(;;) {
+      env->data_fd = accept(env->passive_fd, (struct sockaddr*)&data_addr,
+                            &addr_len);
+      if(env->data_fd >= 0) {
+        break;
+      }
+      if(errno == EINTR) {
+        continue;
+      }
       return -1;
     }
 
