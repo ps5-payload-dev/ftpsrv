@@ -26,6 +26,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "cmd.h"
 #include "io.h"
@@ -247,30 +248,11 @@ ftp_readline(ftp_reader_t *reader) {
 }
 
 /**
- * Case-insensitive prefix match for a fixed length.
- **/
-static int
-ftp_prefix_ieq(const char *s, const char *prefix, size_t n) {
-  for(size_t i = 0; i < n; i++) {
-    unsigned char c = (unsigned char)s[i];
-    if(!c) {
-      return 0;
-    }
-    if(toupper(c) != (unsigned char)prefix[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
-/**
  * Execute an FTP command.
  **/
 static int
 ftp_execute(ftp_env_t *env, char *line) {
-  while(*line == ' ') {
-    line++;
-  }
+  line += strspn(line, " ");
   if(!*line) {
     return 0;
   }
@@ -283,9 +265,7 @@ ftp_execute(ftp_env_t *env, char *line) {
     arg = sep + 1;
   }
 
-  while(*arg == ' ') {
-    arg++;
-  }
+  arg += strspn(arg, " ");
   if(*arg) {
     char *end = arg + strlen(arg);
     while(end > arg && end[-1] == ' ') {
@@ -392,7 +372,7 @@ ftp_thread(void *args) {
     }
 
     cmd = line;
-    if(ftp_prefix_ieq(line, "SITE ", 5)) {
+    if(strncasecmp(line, "SITE ", 5) == 0) {
       cmd += 5;
     }
 

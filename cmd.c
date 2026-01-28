@@ -100,21 +100,13 @@ ftp_normpath(const char *path, char *out, size_t out_size) {
   out[0] = '/';
   out[1] = '\0';
 
-  while(*p == '/') {
-    p++;
-  }
+  p += strspn(p, "/");
 
   while(*p) {
     const char *start = p;
-    size_t comp_len = 0;
-
-    while(*p && *p != '/') {
-      p++;
-      comp_len++;
-    }
-    while(*p == '/') {
-      p++;
-    }
+    size_t comp_len = strcspn(p, "/");
+    p += comp_len;
+    p += strspn(p, "/");
 
     if(!comp_len || (comp_len == 1 && start[0] == '.')) {
       continue;
@@ -723,22 +715,19 @@ ftp_copy_path_arg(const char *arg, char *buf, size_t bufsize) {
     return NULL;
   }
 
-  while(*p == ' ') {
-    p++;
-  }
+  p += strspn(p, " ");
   if(!*p) {
     return NULL;
   }
 
-  const char *end = p + strlen(p);
-  while(end > p && end[-1] == ' ') {
-    end--;
+  size_t len = strlen(p);
+  while(len && p[len - 1] == ' ') {
+    len--;
   }
-  if(end <= p) {
+  if(len == 0) {
     return NULL;
   }
 
-  size_t len = (size_t)(end - p);
   if(len >= bufsize) {
     len = bufsize - 1;
   }
@@ -757,9 +746,7 @@ ftp_list_path_arg(const char *arg, char *buf, size_t bufsize) {
     return NULL;
   }
 
-  while(*p == ' ') {
-    p++;
-  }
+  p += strspn(p, " ");
   if(!*p) {
     return NULL;
   }
@@ -772,14 +759,9 @@ ftp_list_path_arg(const char *arg, char *buf, size_t bufsize) {
   // Skip leading options (e.g., "-al") and honor "--" to end options.
   while(*p == '-') {
     const char *tok = p;
-    size_t len = 0;
-    while(*p && *p != ' ') {
-      p++;
-      len++;
-    }
-    while(*p == ' ') {
-      p++;
-    }
+    size_t len = strcspn(p, " ");
+    p += len;
+    p += strspn(p, " ");
     if(len == 2 && tok[0] == '-' && tok[1] == '-') {
       break;
     }
@@ -795,9 +777,7 @@ ftp_list_path_arg(const char *arg, char *buf, size_t bufsize) {
     }
   }
 
-  while(*p == ' ') {
-    p++;
-  }
+  p += strspn(p, " ");
   if(!*p) {
     return NULL;
   }
@@ -1001,9 +981,7 @@ int
 ftp_cmd_UMASK(ftp_env_t *env, const char* arg) {
   (void)env;
 
-  while(*arg == ' ') {
-    arg++;
-  }
+  arg += strspn(arg, " ");
 
   if(!*arg) {
     mode_t old = umask(0);
@@ -1013,8 +991,8 @@ ftp_cmd_UMASK(ftp_env_t *env, const char* arg) {
 
   char *end = NULL;
   long mode = strtol(arg, &end, 8);
-  while(end && *end == ' ') {
-    end++;
+  if(end) {
+    end += strspn(end, " ");
   }
   if(end == arg || (end && *end) || mode < 0 || mode > 0777) {
     return ftp_active_printf(env, "501 Usage: UMASK <MODE>\r\n");
@@ -1035,9 +1013,7 @@ ftp_cmd_SYMLINK(ftp_env_t *env, const char* arg) {
   char link_path[PATH_MAX];
   const char *p = arg;
 
-  while(*p == ' ') {
-    p++;
-  }
+  p += strspn(p, " ");
   if(!*p) {
     return ftp_active_printf(env, "501 Usage: SYMLINK <TARGET> <LINK>\r\n");
   }
@@ -1056,9 +1032,7 @@ ftp_cmd_SYMLINK(ftp_env_t *env, const char* arg) {
   target_arg[target_len] = '\0';
 
   p = sep;
-  while(*p == ' ') {
-    p++;
-  }
+  p += strspn(p, " ");
   if(!*p) {
     return ftp_active_printf(env, "501 Usage: SYMLINK <TARGET> <LINK>\r\n");
   }
@@ -2709,9 +2683,7 @@ ftp_split_copy_args(const char *arg, char *src, size_t src_sz,
   }
 
   const char *p = arg;
-  while(*p == ' ') {
-    p++;
-  }
+  p += strspn(p, " ");
   if(!*p) {
     return -1;
   }
@@ -2728,9 +2700,7 @@ ftp_split_copy_args(const char *arg, char *src, size_t src_sz,
   memcpy(src, p, src_len);
   src[src_len] = '\0';
 
-  while(*sep == ' ') {
-    sep++;
-  }
+  sep += strspn(sep, " ");
   if(!*sep) {
     return -1;
   }
@@ -3847,19 +3817,20 @@ ftp_cmd_OPTS(ftp_env_t *env, const char *arg) {
     return ftp_active_printf(env, "501 Usage: OPTS UTF8 ON\r\n");
   }
 
-  while(*arg && *arg != ' ' && len + 1 < sizeof(opt)) {
-    opt[len++] = *arg++;
+  len = strcspn(arg, " ");
+  if(len >= sizeof(opt)) {
+    len = sizeof(opt) - 1;
   }
+  memcpy(opt, arg, len);
   opt[len] = '\0';
+  arg += len;
+  arg += strspn(arg, " ");
 
-  while(*arg == ' ') {
-    arg++;
+  len = strcspn(arg, " ");
+  if(len >= sizeof(val)) {
+    len = sizeof(val) - 1;
   }
-
-  len = 0;
-  while(*arg && *arg != ' ' && len + 1 < sizeof(val)) {
-    val[len++] = *arg++;
-  }
+  memcpy(val, arg, len);
   val[len] = '\0';
 
   if(!strcasecmp(opt, "UTF8")) {
