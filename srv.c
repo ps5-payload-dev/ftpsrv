@@ -26,6 +26,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "cmd.h"
 #include "io.h"
@@ -247,30 +248,11 @@ ftp_readline(ftp_reader_t *reader) {
 }
 
 /**
- * Case-insensitive prefix match for a fixed length.
- **/
-static int
-ftp_prefix_ieq(const char *s, const char *prefix, size_t n) {
-  for(size_t i = 0; i < n; i++) {
-    unsigned char c = (unsigned char)s[i];
-    if(!c) {
-      return 0;
-    }
-    if(toupper(c) != (unsigned char)prefix[i]) {
-      return 0;
-    }
-  }
-  return 1;
-}
-
-/**
  * Execute an FTP command.
  **/
 static int
 ftp_execute(ftp_env_t *env, char *line) {
-  while(*line == ' ') {
-    line++;
-  }
+  line += strspn(line, " ");
   if(!*line) {
     return 0;
   }
@@ -283,9 +265,7 @@ ftp_execute(ftp_env_t *env, char *line) {
     arg = sep + 1;
   }
 
-  while(*arg == ' ') {
-    arg++;
-  }
+  arg += strspn(arg, " ");
   if(*arg) {
     char *end = arg + strlen(arg);
     while(end > arg && end[-1] == ' ') {
@@ -392,7 +372,7 @@ ftp_thread(void *args) {
     }
 
     cmd = line;
-    if(ftp_prefix_ieq(line, "SITE ", 5)) {
+    if(strncasecmp(line, "SITE ", 5) == 0) {
       cmd += 5;
     }
 
@@ -443,8 +423,6 @@ ftp_serve(uint16_t port, int notify_user) {
   struct ifaddrs *ifaddr;
   int ifaddr_wait = 1;
   socklen_t addr_len;
-  pthread_attr_t attr;
-  int use_attr = 0;
   pthread_t trd;
   int connfd;
   int srvfd;
@@ -531,39 +509,23 @@ ftp_serve(uint16_t port, int notify_user) {
     return -1;
   }
 
-  addr_len = sizeof(client_addr);
-
-  if(!pthread_attr_init(&attr)) {
-    size_t stack_size = 512 * 1024;
-    use_attr = 1;
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-#ifdef PTHREAD_STACK_MIN
-    if(stack_size < PTHREAD_STACK_MIN) {
-      stack_size = PTHREAD_STACK_MIN;
-    }
-#endif
-    pthread_attr_setstacksize(&attr, stack_size);
-  }
-
   while(1) {
+    addr_len = sizeof(client_addr);
     if((connfd=accept(srvfd, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
+      if(errno == EINTR) {
+        continue;
+      }
       FTP_LOG_PERROR("accept");
       break;
     }
 
-    if(pthread_create(&trd, use_attr ? &attr : NULL, ftp_thread,
+    if(pthread_create(&trd, NULL, ftp_thread,
                       (void *)(long)connfd)) {
       FTP_LOG_PERROR("pthread_create");
       close(connfd);
       continue;
     }
-    if(!use_attr) {
-      pthread_detach(trd);
-    }
-  }
-
-  if(use_attr) {
-    pthread_attr_destroy(&attr);
+    pthread_detach(trd);
   }
 
   return close(srvfd);
