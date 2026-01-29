@@ -423,8 +423,6 @@ ftp_serve(uint16_t port, int notify_user) {
   struct ifaddrs *ifaddr;
   int ifaddr_wait = 1;
   socklen_t addr_len;
-  pthread_attr_t attr;
-  int use_attr = 0;
   pthread_t trd;
   int connfd;
   int srvfd;
@@ -511,18 +509,6 @@ ftp_serve(uint16_t port, int notify_user) {
     return -1;
   }
 
-  if(!pthread_attr_init(&attr)) {
-    size_t stack_size = 512 * 1024;
-    use_attr = 1;
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-#ifdef PTHREAD_STACK_MIN
-    if(stack_size < PTHREAD_STACK_MIN) {
-      stack_size = PTHREAD_STACK_MIN;
-    }
-#endif
-    pthread_attr_setstacksize(&attr, stack_size);
-  }
-
   while(1) {
     addr_len = sizeof(client_addr);
     if((connfd=accept(srvfd, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
@@ -533,19 +519,13 @@ ftp_serve(uint16_t port, int notify_user) {
       break;
     }
 
-    if(pthread_create(&trd, use_attr ? &attr : NULL, ftp_thread,
+    if(pthread_create(&trd, NULL, ftp_thread,
                       (void *)(long)connfd)) {
       FTP_LOG_PERROR("pthread_create");
       close(connfd);
       continue;
     }
-    if(!use_attr) {
-      pthread_detach(trd);
-    }
-  }
-
-  if(use_attr) {
-    pthread_attr_destroy(&attr);
+    pthread_detach(trd);
   }
 
   return close(srvfd);
