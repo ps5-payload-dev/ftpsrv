@@ -39,6 +39,24 @@ along with this program; see the file COPYING. If not, see
  **/
 int
 ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
+  struct iovec iov_preinst[] = {
+    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/da0x0.crypt"),
+    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/preinst"),
+    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
+    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
+    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
+    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
+    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
+  };
+  struct iovec iov_preinst2[] = {
+    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/da0x1.crypt"),
+    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/preinst2"),
+    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
+    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
+    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
+    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
+    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
+  };
   struct iovec iov_sys[] = {
     IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/da0x4.crypt"),
     IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system"),
@@ -48,7 +66,6 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
     IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
     IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
   };
-
   struct iovec iov_sysex[] = {
     IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/da0x5.crypt"),
     IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system_ex"),
@@ -59,15 +76,24 @@ ftp_cmd_MTRW(ftp_env_t *env, const char* arg) {
     IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
   };
 
+  if(nmount(iov_preinst, IOVEC_SIZE(iov_preinst), MNT_UPDATE)) {
+    return ftp_perror(env);
+  }
+  if(nmount(iov_preinst2, IOVEC_SIZE(iov_preinst2), MNT_UPDATE)) {
+    return ftp_perror(env);
+  }
   if(nmount(iov_sys, IOVEC_SIZE(iov_sys), MNT_UPDATE)) {
     return ftp_perror(env);
   }
-
   if(nmount(iov_sysex, IOVEC_SIZE(iov_sysex), MNT_UPDATE)) {
     return ftp_perror(env);
   }
 
-  return ftp_active_printf(env, "200 /system and /system_ex remounted\r\n");
+  return ftp_active_printf(env,
+			   "200- /preinst remounted\r\n"
+			   "200- /preinst2 remounted\r\n"
+			   "200- /system remounted\r\n"
+			   "200 /system_ex remounted\r\n");
 }
 
 
