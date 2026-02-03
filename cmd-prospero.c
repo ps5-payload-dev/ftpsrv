@@ -14,17 +14,12 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
-#include <fcntl.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <sys/_iovec.h>
 #include <sys/mount.h>
 
 #include "cmd.h"
-#include "self.h"
 
 
 /**
