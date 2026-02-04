@@ -357,6 +357,21 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
 
 
 /**
+ * List supported FTP protocol extensions.
+ **/
+int
+ftp_cmd_FEAT(ftp_env_t *env, const char *arg) {
+  return ftp_active_printf(env,
+                           "211-Features:\r\n"
+                           " MLSD\r\n"
+                           " KILL\r\n"
+                           " MTRW\r\n"
+                           " SELF\r\n"
+                           "211 End\r\n");
+}
+
+
+/**
  * Trasfer a list of files and folder.
  **/
 int
@@ -442,6 +457,62 @@ ftp_cmd_MKD(ftp_env_t *env, const char* arg) {
   }
 
   return ftp_active_printf(env, "226 Directory created\r\n");
+}
+
+
+/**
+ * Transfer a machine-readable directory listing.
+ **/
+int
+ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
+  char pathbuf[PATH_MAX*3];
+  struct stat statbuf;
+  struct dirent *ent;
+  char timebuf[20];
+  struct tm tm;
+  DIR *dir;
+  int err;
+
+  if(!(dir=opendir(env->cwd))) {
+    return ftp_perror(env);
+  }
+
+  if(ftp_data_open(env)) {
+    err = ftp_perror(env);
+    closedir(dir);
+    return err;
+  }
+
+  ftp_active_printf(env, "150 Opening data transfer\r\n");
+  while((ent=readdir(dir))) {
+    snprintf(pathbuf, sizeof(pathbuf), "/%s/%s", env->cwd, ent->d_name);
+    if(stat(pathbuf, &statbuf) != 0) {
+      continue;
+    }
+
+    if(env->self2elf && self_is_valid(pathbuf) == 1) {
+      statbuf.st_size = self_get_elfsize(pathbuf);
+    }
+
+    gmtime_r(&statbuf.st_ctim.tv_sec, &tm);
+    strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", &tm);
+
+    ftp_data_printf(env, "type=%s;size=%llu;modify=%s; %s\r\n",
+		    S_ISDIR(statbuf.st_mode) ? "dir" : "file",
+		    statbuf.st_size, timebuf, ent->d_name);
+  }
+
+  if(ftp_data_close(env)) {
+    err = ftp_perror(env);
+    closedir(dir);
+    return err;
+  }
+
+  if(closedir(dir)) {
+    return ftp_perror(env);
+  }
+
+  return ftp_active_printf(env, "226 Transfer complete\r\n");
 }
 
 
