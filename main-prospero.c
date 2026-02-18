@@ -77,12 +77,29 @@ find_pid(const char* name) {
  * Launch payload.
  **/
 int
-main() {
+main(int argc, char* argv[]) {
   uint16_t port = 2121;
   int notify_user = 1;
   pid_t pid;
+  char c;
 
   syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
+
+  while((c=getopt(argc, argv, "p:h")) != -1) {
+    switch(c) {
+    case 'p':
+      port = atoi(optarg);
+      break;
+
+    case 'h':
+    default:
+      printf("usage: %s [-p PORT]\n", argv[0]);
+      puts("");
+      printf("options:");
+      printf("    -p PORT    Bind the socket server to the given PORT (default: 2121)\n");
+      return EXIT_FAILURE;
+    }
+  }
 
   while((pid=find_pid("ftpsrv.elf")) > 0) {
     if(kill(pid, SIGKILL)) {

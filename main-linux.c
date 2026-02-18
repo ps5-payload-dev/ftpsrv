@@ -16,19 +16,39 @@ along with this program; see the file COPYING. If not, see
 
 #include <unistd.h>
 #include <signal.h>
+#include <stdlib.h>
 
 #include "log.h"
 #include "srv.h"
 
 
 int
-main() {
+main(int argc, char* argv[]) {
   uint16_t port = 2121;
+  int notify_user = 1;
+  char c;
+
+  while((c=getopt(argc, argv, "p:h")) != -1) {
+    switch(c) {
+    case 'p':
+      port = atoi(optarg);
+      break;
+
+    case 'h':
+    default:
+      printf("usage: %s [-p PORT]\n", argv[0]);
+      puts("");
+      printf("options:");
+      printf("    -p PORT    Bind the socket server to the given PORT (default: 2121)\n");
+      return 1;
+    }
+  }
 
   signal(SIGPIPE, SIG_IGN);
 
   while(1) {
-    ftp_serve(port, 0);
+    ftp_serve(port, notify_user);
+    notify_user = 0;
     sleep(3);
   }
 
