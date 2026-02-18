@@ -92,8 +92,6 @@ main() {
   syscall(SYS_thr_set_name, -1, "ftpsrv.elf");
   signal(SIGPIPE, SIG_IGN);
 
-  FTP_LOG_PRINTF("FTP server was compiled at %s %s\n", __DATE__, __TIME__);
-
   while(1) {
     ftp_serve(port, notify_user);
     notify_user = 0;

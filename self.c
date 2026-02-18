@@ -31,14 +31,14 @@ along with this program; see the file COPYING. If not, see
 
 
 /**
- * This global lock is used to address race conditions that may occur when
+ * A global lock that address race conditions that may occur when
  * threads atempt to read several SELF files at the same time.
  **/
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 /**
- * Decrypt and copy an ELF segment.
+ * Decrypt and copy an encrypted ELF segment.
  **/
 static int
 decrypt_segment(int self_fd, int elf_fd, const Elf64_Phdr* phdr, size_t ind) {
@@ -324,7 +324,7 @@ self_extract_elf(int self_fd, int elf_fd) {
       continue;
     }
 
-    // Decrypt and/or copy the segment
+    // Decrypt and copy the segment
     if(entry->props.is_encrypted || entry->props.is_compressed) {
       if(decrypt_segment(self_fd, elf_fd, &phdr, i)) {
 	free(entries);
