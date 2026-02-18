@@ -299,7 +299,7 @@ ftp_serve(uint16_t port, int notify_user) {
     printf("| %-16s Copyright (C) 2025 John Törnblom & drakmor |\n", VERSION_TAG);
     puts("'-------------------------------------------------------------'");
     puts("");
-    printf("compiled at %s %s, running on port %d\n", __DATE__, __TIME__, port);
+    printf("Compiled at %s %s, running on port %d\n", __DATE__, __TIME__, port);
   }
 
   if(getifaddrs(&ifaddr) == -1) {
