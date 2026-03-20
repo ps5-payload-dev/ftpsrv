@@ -197,9 +197,12 @@ self_prospero_constructor(void) {
 
   case 0x1100:
   case 0x1120:
+    pagertab_addr = KERNEL_ADDRESS_DATA_BASE + 0xDF1940;
+    break;
+
   case 0x1140:
   case 0x1160:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xDF1940;
+    pagertab_addr = KERNEL_ADDRESS_DATA_BASE + 0xDF1960;
     break;
 
   case 0x1200:
