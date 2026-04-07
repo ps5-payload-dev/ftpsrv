@@ -39,6 +39,19 @@ the FTP server can be compiled using the following command:
 john@localhost:ftpsrv$ make -f Makefile.posix
 ```
 
+## Installing on the PS5
+On the PS5, ftpsrv can be installed to disk and then launched from the standard
+Sony shell UI assuming [websrv][websrv] is running. To perform the install,
+deploy the install payload to an ELF loader, e.g.,
+:```console
+john@localhost:~$ export PS5_HOST=ps5
+john@localhost:~$ export PS5_PORT=9021
+john@localhost:~$ export PS5_PAYLOAD=https://github.com/ps5-payload-dev/ftpsrv/releases/latest/download/ftpsrv-ps5-install.elf
+john@localhost:~$ echo "$PS5_PAYLOAD" | nc -q0 $PS5_HOST $PS5_PORT
+```
+If the install is successful, a new item appears in the Sony shell UI that can
+be used launch ftpsrv when [websrv][websrv] is running.
+
 ## Known issues
 Some PS5 firmwares below vesion 4 contains a kernel bug where reading from some SELF
 files causes the read syscall to stall.
@@ -54,4 +67,5 @@ ftpsrv is licensed under the GPLv3+.
 
 [sdk-ps4]: https://github.com/ps4-payload-dev/sdk
 [sdk-ps5]: https://github.com/ps5-payload-dev/sdk
+[websrv]: https://github.com/ps5-payload-dev/websrv
 [issues]: https://github.com/ps5-payload-dev/ftpsrv/issues/new

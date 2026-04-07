@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <!-- dont request favicon -->
+    <link rel="icon" href="data:,">
+    <!-- https://cdn.jsdelivr.net/npm/xterm@5.0.0/css/xterm.min.css -->
+    <link rel="stylesheet" href="xterm.css">
+    <!-- cdn.jsdelivr.net/npm/xterm@5.0.0/lib/xterm.min.js -->
+    <script src="xterm.js"></script>
+  </head>
+  <body id="terminal" bgcolor="black">
+    <script>
+      async function render_stdout(response) {
+	  try {
+	      const reader = response.body.getReader();
+	      const decoder = new TextDecoder();
+
+	      while (true) {
+		  const { done, value } = await reader.read();
+		  if (done) {
+		      break;
+		  }
+		  let decodedValue = decoder.decode(value);
+		  term.write(decodedValue);
+	      }
+	  } catch (error) {
+	  }
+      }
+
+      async function deploy(uri) {
+	  const params = new URLSearchParams({
+	      elf: uri,
+	      pipe: "1"
+	  });
+
+	  let response = await fetch('/elfldr?' + params);
+	  if(!response.ok) {
+	      return false;
+	  }
+	  render_stdout(response);
+	  return true;
+      }
+
+      const term = new Terminal({
+	  convertEol: true,
+	  altClickMovesCursor: false,
+	  disableStdin: true,
+	  fontSize: 18,
+	  cols: 90,
+	  rows: 25
+      });
+      term.open(document.getElementById('terminal'));
+
+      //const uri = 'https://github.com/ps5-payload-dev/ftpsrv/releases/latest/download/ftpsrv-ps5.elf';
+      const uri = 'file://user/app/BREW10001/payload.elf';
+      deploy(uri);
+    </script>
+  </body>
+</html>
