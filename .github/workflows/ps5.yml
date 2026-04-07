@@ -41,7 +41,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Payload
-        path: ftpsrv-ps5.elf ftpsrv-ps5-install.elf
+        path: |
+          ftpsrv-ps5.elf
+          ftpsrv-ps5-install.elf
         if-no-files-found: error
 
   release:
@@ -63,4 +65,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: true
-          files: ftpsrv-ps5.elf ftpsrv-ps5-install.elf
+          files: |
+            ftpsrv-ps5.elf
+            ftpsrv-ps5-install.elf
