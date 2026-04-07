@@ -23,19 +23,19 @@ along with this program; see the file COPYING. If not, see
 #include <ps5/kernel.h>
 
 
-#define INCASSET(name, file)				      \
-  __asm__(".section .rodata\n"				      \
-	  ".global " #name "\n"				      \
-	  ".global " #name "_end\n"			      \
-	  ".global " #name "_size\n"			      \
-	  ".align 16\n"					      \
-	  #name ":\n"					      \
-	  ".incbin \"" file "\"\n"			      \
-	  #name "_end:\n"				      \
-	  #name "_size:\n"				      \
-	  ".quad " #name "_end - " #name "\n"		      \
-	  ".previous\n");				      \
-  extern const uint8_t name[];				      \
+#define INCASSET(name, file)			\
+  __asm__(".section .rodata\n"			\
+	  ".global " #name "\n"			\
+	  ".global " #name "_end\n"		\
+	  ".global " #name "_size\n"		\
+	  ".align 16\n"				\
+	  #name ":\n"				\
+	  ".incbin \"" file "\"\n"		\
+	  #name "_end:\n"			\
+	  #name "_size:\n"			\
+	  ".quad " #name "_end - " #name "\n"	\
+	  ".previous\n");			\
+  extern const uint8_t name[];			\
   extern const size_t name##_size;
 
 
@@ -125,6 +125,7 @@ main(int argc, char *argv[]) {
     perror("install_file");
     return -1;
   }
+
   if(install_file("/user/app/"TITLE_ID"/sce_sys/icon0.png", icon0, icon0_size)) {
     perror("install_file");
     return -1;
