@@ -43,7 +43,7 @@ john@localhost:ftpsrv$ make -f Makefile.posix
 On the PS5, ftpsrv can be installed to disk and then launched from the standard
 Sony shell UI assuming [websrv][websrv] is running. To perform the install,
 deploy the install payload to an ELF loader, e.g.,
-:```console
+```console
 john@localhost:~$ export PS5_HOST=ps5
 john@localhost:~$ export PS5_PORT=9021
 john@localhost:~$ export PS5_PAYLOAD=https://github.com/ps5-payload-dev/ftpsrv/releases/latest/download/ftpsrv-ps5-install.elf
