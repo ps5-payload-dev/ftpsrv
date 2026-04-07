@@ -296,7 +296,7 @@ ftp_serve(uint16_t port, int notify_user) {
     puts("||  _| | |_  | |_) | \\__ \\ | |     \\ V /   _  |  __/ | | |  _||");
     puts("||_|    \\__| | .__/  |___/ |_|      \\_/   (_)  \\___| |_| |_|  |");
     puts("|            |_|                                              |");
-    printf("| %-16s Copyright (C) 2025 John Törnblom & drakmor |\n", VERSION_TAG);
+    printf("| %-16s  https://github.com/ps5-payload-dev/ftpsrv |\n", VERSION_TAG);
     puts("'-------------------------------------------------------------'");
     puts("");
     printf("Compiled at %s %s, running on port %d\n", __DATE__, __TIME__, port);
