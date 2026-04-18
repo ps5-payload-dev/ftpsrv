@@ -53,8 +53,11 @@ If the install is successful, a new item appears in the Sony shell UI that can
 be used launch ftpsrv when [websrv][websrv] is running.
 
 ## Known issues
-Some PS5 firmwares below vesion 4 contains a kernel bug where reading from some SELF
-files causes the read syscall to stall.
+- Some PS5 firmwares below vesion 4 contains a kernel bug where reading from some SELF
+  files causes the read syscall to stall.
+- PS5 SELF files on the root (e.g., /SceSysAvControl.elf) cannot be decrypted.
+  To work arround this, copy the encrypted file to /data/ first and download it
+  from there instead and it should be decrypted.
 
 ## Reporting Bugs
 If you encounter problems with ftpsrv, please [file a github issue][issues].
