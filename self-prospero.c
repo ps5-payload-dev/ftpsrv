@@ -36,7 +36,6 @@ along with this program; see the file COPYING. If not, see
 /**
  *
  **/
-static intptr_t KERNEL_ADDRESS_PAGER_TABLE     = 0;
 static intptr_t KERNEL_ADDRESS_PAGER_OPS_VNODE = 0;
 static intptr_t KERNEL_ADDRESS_PAGER_OPS_SELF  = 0;
 
@@ -100,129 +99,10 @@ self_map_segment(int fd, const Elf64_Phdr *phdr, size_t ind) {
  **/
 static void __attribute__((constructor))
 self_prospero_constructor(void) {
-  switch(kernel_get_fw_version() >> 16) {
-  case 0x100:
-  case 0x101:
-  case 0x102:
-  case 0x105:
-  case 0x110:
-  case 0x111:
-  case 0x112:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xC27C40;
-    break;
-
-  case 0x113:
-  case 0x114:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xC27CA0;
-    break;
-
-  case 0x200:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xC4EF60;
-    break;
-
-  case 0x220:
-  case 0x225:
-  case 0x226:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xC4EFA0;
-    break;
-
-  case 0x230:
-  case 0x250:
-  case 0x270:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xC4F120;
-    break;
-
-  case 0x300:
-  case 0x310:
-  case 0x320:
-  case 0x321:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xCAF8C0;
-    break;
-
-  case 0x400:
-  case 0x402:
-  case 0x403:
-  case 0x450:
-  case 0x451:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xD20840;
-    break;
-
-  case 0x500:
-  case 0x502:
-  case 0x510:
-  case 0x550:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE0FEF0;
-    break;
-
-  case 0x600:
-  case 0x602:
-  case 0x650:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE30410;
-    break;
-
-  case 0x700:
-  case 0x701:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE310C0;
-    break;
-
-  case 0x720:
-  case 0x740:
-  case 0x760:
-  case 0x761:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE31180;
-    break;
-
-  case 0x800:
-  case 0x820:
-  case 0x840:
-  case 0x860:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE31250;
-    break;
-
-  case 0x900:
-  case 0x905:
-  case 0x920:
-  case 0x940:
-  case 0x960:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xDE0420;
-    break;
-
-  case 0x1000:
-  case 0x1001:
-  case 0x1020:
-  case 0x1040:
-  case 0x1060:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xDE04F0;
-    break;
-
-  case 0x1100:
-  case 0x1120:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xDF1940;
-    break;
-
-  case 0x1140:
-  case 0x1160:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xDF1960;
-    break;
-
-  case 0x1200:
-  case 0x1202:
-  case 0x1220:
-  case 0x1240:
-  case 0x1260:
-  case 0x1270:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xDF2860;
-    break;
-
-  case 0x1300:
-  case 0x1320:
-    KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE038D0;
-    break;
-	  
-  default:
+  if(!KERNEL_ADDRESS_PAGER_TABLE) {
     return;
   }
-
+  
   KERNEL_ADDRESS_PAGER_OPS_VNODE = kernel_getlong(KERNEL_ADDRESS_PAGER_TABLE + 2 * 8);
   KERNEL_ADDRESS_PAGER_OPS_SELF = kernel_getlong(KERNEL_ADDRESS_PAGER_TABLE + 7 * 8);
 }
