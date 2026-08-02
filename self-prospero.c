@@ -221,6 +221,7 @@ self_prospero_constructor(void) {
 
   case 0x1340:
   case 0x1342:
+  case 0x1360:
     KERNEL_ADDRESS_PAGER_TABLE = KERNEL_ADDRESS_DATA_BASE + 0xE03910;
     break;
 	  
