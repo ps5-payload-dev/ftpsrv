@@ -27,18 +27,22 @@ along with this program; see the file COPYING. If not, see
 
 int
 io_nread(int fd, void* buf, size_t n) {
-  int r;
+  unsigned char* data = buf;
+  ssize_t r;
 
-  while((r=read(fd, buf, n)) < 0) {
-    if(errno == EINTR) {
-      continue;
+  while(n) {
+    if((r=read(fd, data, n)) < 0) {
+      if(errno == EINTR) {
+	continue;
+      }
+      return -1;
     }
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    data += r;
+    n -= r;
   }
 
   return 0;
@@ -47,18 +51,22 @@ io_nread(int fd, void* buf, size_t n) {
 
 int
 io_nwrite(int fd, const void* buf, size_t n) {
-  int r;
+  const unsigned char* data = buf;
+  ssize_t r;
 
-  while((r=write(fd, buf, n)) < 0) {
-    if(errno == EINTR) {
-      continue;
+  while(n) {
+    if((r=write(fd, data, n)) < 0) {
+      if(errno == EINTR) {
+	continue;
+      }
+      return -1;
     }
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    data += r;
+    n -= r;
   }
 
   return 0;
@@ -100,18 +108,23 @@ io_ncopy(int fd_in, int fd_out, size_t size) {
 
 int
 io_pread(int fd, void* buf, size_t n, off_t off) {
-  int r;
+  unsigned char* data = buf;
+  ssize_t r;
 
-  while((r=pread(fd, buf, n, off)) < 0) {
-    if(errno == EINTR) {
-      continue;
+  while(n) {
+    if((r=pread(fd, data, n, off)) < 0) {
+      if(errno == EINTR) {
+	continue;
+      }
+      return -1;
     }
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    data += r;
+    n -= r;
+    off += r;
   }
 
   return 0;
@@ -120,18 +133,23 @@ io_pread(int fd, void* buf, size_t n, off_t off) {
 
 int
 io_pwrite(int fd, const void* buf, size_t n, off_t off) {
-  int r;
+  const unsigned char* data = buf;
+  ssize_t r;
 
-  while((r=pwrite(fd, buf, n, off)) < 0) {
-    if(errno == EINTR) {
-      continue;
+  while(n) {
+    if((r=pwrite(fd, data, n, off)) < 0) {
+      if(errno == EINTR) {
+	continue;
+      }
+      return -1;
     }
-    return -1;
-  }
-
-  if(r != n) {
-    errno = EIO;
-    return -1;
+    if(!r) {
+      errno = EIO;
+      return -1;
+    }
+    data += r;
+    n -= r;
+    off += r;
   }
 
   return 0;
