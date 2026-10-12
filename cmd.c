@@ -699,6 +699,98 @@ ftp_cmd_MODE(ftp_env_t *env, const char* arg) {
 
 
 /**
+ * Transfer a list of names: the entries of a directory, or the given path when
+ * it names a file.
+ **/
+int
+ftp_cmd_NLST(ftp_env_t *env, const char* arg) {
+  char pathbuf[PATH_MAX];
+  struct dirent *ent;
+  const char *p = arg;
+  struct stat st;
+  DIR *dir = 0;
+  int err = 0;
+
+  if(env->mode == 'B' && !ftp_block_ready(env)) {
+    return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
+  }
+
+  // skip ls-style options such as -a (names starting with a dot are always
+  // listed)
+  while(p[0] == '-') {
+    if(!(p=strchr(p, ' '))) {
+      p = "";
+      break;
+    }
+    while(p[0] == ' ') {
+      p++;
+    }
+  }
+
+  if(p[0]) {
+    ftp_abspath(env, pathbuf, p);
+  } else {
+    snprintf(pathbuf, sizeof(pathbuf), "%s", env->cwd);
+  }
+
+  if(stat(pathbuf, &st)) {
+    return ftp_perror(env);
+  }
+  if(S_ISDIR(st.st_mode) && !(dir=opendir(pathbuf))) {
+    return ftp_perror(env);
+  }
+
+  if(env->mode == 'B') {
+    if((err=ftp_block_begin(env, "150 Opening data transfer\r\n"))) {
+      if(dir) {
+	closedir(dir);
+      }
+      return err > 0 ? 0 : err;
+    }
+  } else {
+    if(ftp_data_open(env)) {
+      err = ftp_perror(env);
+      if(dir) {
+	closedir(dir);
+      }
+      return err;
+    }
+
+    ftp_active_printf(env, "150 Opening data transfer\r\n");
+  }
+
+  if(!dir) {
+    err = ftp_data_printf(env, "%s\r\n", p);
+  } else {
+    while(!err && (ent=readdir(dir))) {
+      if(strcmp(ent->d_name, ".") && strcmp(ent->d_name, "..")) {
+	err = ftp_data_printf(env, "%s\r\n", ent->d_name);
+      }
+    }
+    closedir(dir);
+  }
+
+  if(env->mode == 'B') {
+    if(err) {
+      return ftp_block_abort(env);
+    }
+    return ftp_block_end(env);
+  }
+
+  if(err) {
+    ftp_data_close(env);
+    return ftp_active_printf(env, "426 Connection closed; transfer aborted.\r\n");
+  }
+
+  if(ftp_data_close(env)) {
+    return ftp_perror(env);
+  }
+
+  return ftp_active_printf(env, "226 Transfer complete\r\n");
+}
+
+
+/**
  * No operation.
  **/
 int

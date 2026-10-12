@@ -56,6 +56,7 @@ static ftp_command_t commands[] = {
   {"MKD",  ftp_cmd_MKD},
   {"MLSD", ftp_cmd_MLSD},
   {"MODE", ftp_cmd_MODE},
+  {"NLST", ftp_cmd_NLST},
   {"NOOP", ftp_cmd_NOOP},
   {"PASV", ftp_cmd_PASV},
   {"PORT", ftp_cmd_PORT},

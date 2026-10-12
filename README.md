@@ -21,8 +21,9 @@ Besides the default stream mode, the server supports block mode (`MODE B`,
 mode, closing the data connection marks the end of a file, so every transfer
 needs a new `PASV`/`PORT` and a new TCP connection. In block mode, data is sent
 in blocks and the end of a file is an EOF block, so a client can set up the data
-connection once and reuse it for any number of `STOR`, `APPE`, `RETR`, `LIST`
-and `MLSD` commands, which is much faster when transferring many small files:
+connection once and reuse it for any number of `STOR`, `APPE`, `RETR`, `LIST`,
+`NLST` and `MLSD` commands, which is much faster when transferring many small
+files:
  - `MODE B` and `MODE S` switch between the modes (`200`); `MODE S` closes a
    data connection kept open by block mode.
  - A transfer that opens the connection requested by `PASV` or `PORT` starts

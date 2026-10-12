@@ -64,6 +64,7 @@ int ftp_cmd_LIST(ftp_env_t *env, const char* arg);
 int ftp_cmd_MKD (ftp_env_t *env, const char* arg);
 int ftp_cmd_MLSD(ftp_env_t *env, const char* arg);
 int ftp_cmd_MODE(ftp_env_t *env, const char* arg);
+int ftp_cmd_NLST(ftp_env_t *env, const char* arg);
 int ftp_cmd_NOOP(ftp_env_t *env, const char* arg);
 int ftp_cmd_PASV(ftp_env_t *env, const char* arg);
 int ftp_cmd_PORT(ftp_env_t *env, const char* arg);
