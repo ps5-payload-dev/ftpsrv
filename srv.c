@@ -55,6 +55,7 @@ static ftp_command_t commands[] = {
   {"LIST", ftp_cmd_LIST},
   {"MKD",  ftp_cmd_MKD},
   {"MLSD", ftp_cmd_MLSD},
+  {"MODE", ftp_cmd_MODE},
   {"NOOP", ftp_cmd_NOOP},
   {"PASV", ftp_cmd_PASV},
   {"PORT", ftp_cmd_PORT},
@@ -209,13 +210,16 @@ ftp_thread(void *args) {
   char* cmd;
   int opt;
 
-  env.data_fd     = -1;
-  env.passive_fd  = -1;
-  env.active_fd   = (int)(long)args;
+  env.data_fd      = -1;
+  env.passive_fd   = -1;
+  env.active_fd    = (int)(long)args;
 
-  env.type        = 'I';
-  env.data_offset = 0;
-  env.self2elf    = 1;
+  env.type         = 'I';
+  env.mode         = 'S';
+  env.data_pending = 0;
+  env.data_offset  = 0;
+  env.self2elf     = 1;
+  env.blockbuf     = 0;
 
   strcpy(env.cwd, "/");
   memset(env.rename_path, 0, sizeof(env.rename_path));
@@ -228,6 +232,9 @@ ftp_thread(void *args) {
 
   env.readbuf_size = IO_COPY_BUFSIZE;
   if(!(env.readbuf=malloc(env.readbuf_size))) {
+    FTP_LOG_PERROR("malloc");
+    running = 0;
+  } else if(!(env.blockbuf=malloc(IO_BLOCK_BUFSIZE))) {
     FTP_LOG_PERROR("malloc");
     running = 0;
   } else {
@@ -265,6 +272,10 @@ ftp_thread(void *args) {
 
   if(env.readbuf) {
     free(env.readbuf);
+  }
+
+  if(env.blockbuf) {
+    free(env.blockbuf);
   }
 
   pthread_exit(NULL);

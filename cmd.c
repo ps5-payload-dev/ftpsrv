@@ -25,6 +25,7 @@ along with this program; see the file COPYING. If not, see
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -117,7 +118,33 @@ ftp_data_open(ftp_env_t *env) {
     return ftp_data_fail(env);
   }
 
+  // the connection stays open between transfers in block mode, so send the
+  // last block of each transfer right away instead of waiting until the peer
+  // acknowledges the previous data
+  if(env->mode == 'B') {
+    opt = 1;
+    if(setsockopt(env->data_fd, IPPROTO_TCP, TCP_NODELAY, &opt,
+		  sizeof(opt)) < 0) {
+      FTP_LOG_PERROR("setsockopt");
+    }
+  }
+
+  env->data_pending = 0;
+
   return 0;
+}
+
+
+/**
+ * Transmit data via an existing data connection, as data blocks in block mode.
+ **/
+static int
+ftp_data_write(ftp_env_t *env, const void *buf, size_t len) {
+  if(env->mode == 'B') {
+    return io_block_write(&env->data_writer, buf, len);
+  }
+
+  return io_nwrite(env->data_fd, buf, len);
 }
 
 
@@ -134,7 +161,7 @@ ftp_data_printf(ftp_env_t *env, const char *fmt, ...) {
   len = vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
 
-  if(io_nwrite(env->data_fd, buf, len)) {
+  if(ftp_data_write(env, buf, len)) {
     return -1;
   }
 
@@ -164,6 +191,64 @@ ftp_data_close(ftp_env_t *env) {
   }
 
   return 0;
+}
+
+
+/**
+ * Check if a transfer in block mode has a data connection to use: a new one
+ * requested by PASV or PORT, or the one kept open by the previous transfer.
+ **/
+static int
+ftp_block_ready(ftp_env_t *env) {
+  return env->data_pending || env->data_fd != -1;
+}
+
+
+/**
+ * Start a transfer in block mode: open the data connection requested by PASV
+ * or PORT and send the given 150 reply, or reuse the connection kept open by
+ * the previous transfer and reply 125. Returns 0 when the transfer can start;
+ * otherwise an error reply was sent, and the result is 1 (-1 if the control
+ * connection failed).
+ **/
+static int
+ftp_block_begin(ftp_env_t *env, const char *msg) {
+  if(!env->data_pending) {
+    msg = "125 Data connection already open; transfer starting.\r\n";
+  } else if(ftp_data_open(env)) {
+    return ftp_active_printf(env, "425 Can't open data connection.\r\n") ?
+      -1 : 1;
+  }
+
+  io_block_writer_init(&env->data_writer, env->data_fd, env->blockbuf);
+
+  return ftp_active_printf(env, "%s", msg);
+}
+
+
+/**
+ * Abort a transfer in block mode after a failure of the data connection, or
+ * of the data it carries.
+ **/
+static int
+ftp_block_abort(ftp_env_t *env) {
+  ftp_data_close(env);
+
+  return ftp_active_printf(env, "426 Connection closed; transfer aborted.\r\n");
+}
+
+
+/**
+ * End a transfer in block mode that sends data with an EOF block, keeping the
+ * data connection open for the next transfer.
+ **/
+static int
+ftp_block_end(ftp_env_t *env) {
+  if(io_block_write_eof(&env->data_writer)) {
+    return ftp_block_abort(env);
+  }
+
+  return ftp_active_printf(env, "250 Transfer complete.\r\n");
 }
 
 
@@ -230,6 +315,12 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   uint16_t port = 0;
   int ret = 0;
 
+  // a new data connection replaces the one kept open in block mode
+  if(env->data_fd != -1) {
+    ftp_data_close(env);
+  }
+  env->data_pending = 0;
+
   if(getsockname(env->active_fd, (struct sockaddr*)&sockaddr, &sockaddr_len)) {
     return ftp_perror(env);
   }
@@ -272,6 +363,7 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
     return ret;
   }
   port = sockaddr.sin_port;
+  env->data_pending = 1;
 
   return ftp_active_printf(env, "227 Entering Passive Mode (%hhu,%hhu,%hhu,%hhu,%hhu,%hhu).\r\n",
 			   (addr >> 0) & 0xFF,
@@ -410,6 +502,10 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   DIR *dir;
   int err;
 
+  if(env->mode == 'B' && !ftp_block_ready(env)) {
+    return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
+  }
+
   if(arg[0] && arg[0] != '-') {
     p = arg;
   }
@@ -418,13 +514,20 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  if(ftp_data_open(env)) {
-    err = ftp_perror(env);
-    closedir(dir);
-    return err;
-  }
+  if(env->mode == 'B') {
+    if((err=ftp_block_begin(env, "150 Opening data transfer\r\n"))) {
+      closedir(dir);
+      return err > 0 ? 0 : err;
+    }
+  } else {
+    if(ftp_data_open(env)) {
+      err = ftp_perror(env);
+      closedir(dir);
+      return err;
+    }
 
-  ftp_active_printf(env, "150 Opening data transfer\r\n");
+    ftp_active_printf(env, "150 Opening data transfer\r\n");
+  }
 
   while((ent=readdir(dir))) {
     if(p[0] == '/') {
@@ -445,9 +548,18 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
     ftp_mode_string(statbuf.st_mode, modebuf);
     gmtime_r(&statbuf.st_ctim.tv_sec, &tm);
     strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &tm);
-    ftp_data_printf(env, "%s %lu %lu %lu %llu %s %s\r\n", modebuf,
-		    statbuf.st_nlink, statbuf.st_uid, statbuf.st_gid,
-		    statbuf.st_size, timebuf, ent->d_name);
+    if(ftp_data_printf(env, "%s %lu %lu %lu %llu %s %s\r\n", modebuf,
+		       statbuf.st_nlink, statbuf.st_uid, statbuf.st_gid,
+		       statbuf.st_size, timebuf, ent->d_name) &&
+       env->mode == 'B') {
+      closedir(dir);
+      return ftp_block_abort(env);
+    }
+  }
+
+  if(env->mode == 'B') {
+    closedir(dir);
+    return ftp_block_end(env);
   }
 
   if(ftp_data_close(env)) {
@@ -497,17 +609,29 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
   DIR *dir;
   int err;
 
+  if(env->mode == 'B' && !ftp_block_ready(env)) {
+    return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
+  }
+
   if(!(dir=opendir(env->cwd))) {
     return ftp_perror(env);
   }
 
-  if(ftp_data_open(env)) {
-    err = ftp_perror(env);
-    closedir(dir);
-    return err;
+  if(env->mode == 'B') {
+    if((err=ftp_block_begin(env, "150 Opening data transfer\r\n"))) {
+      closedir(dir);
+      return err > 0 ? 0 : err;
+    }
+  } else {
+    if(ftp_data_open(env)) {
+      err = ftp_perror(env);
+      closedir(dir);
+      return err;
+    }
+
+    ftp_active_printf(env, "150 Opening data transfer\r\n");
   }
 
-  ftp_active_printf(env, "150 Opening data transfer\r\n");
   while((ent=readdir(dir))) {
     snprintf(pathbuf, sizeof(pathbuf), "/%s/%s", env->cwd, ent->d_name);
     if(stat(pathbuf, &statbuf) != 0) {
@@ -521,9 +645,18 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
     gmtime_r(&statbuf.st_ctim.tv_sec, &tm);
     strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", &tm);
 
-    ftp_data_printf(env, "type=%s;size=%llu;modify=%s; %s\r\n",
-		    S_ISDIR(statbuf.st_mode) ? "dir" : "file",
-		    statbuf.st_size, timebuf, ent->d_name);
+    if(ftp_data_printf(env, "type=%s;size=%llu;modify=%s; %s\r\n",
+		       S_ISDIR(statbuf.st_mode) ? "dir" : "file",
+		       statbuf.st_size, timebuf, ent->d_name) &&
+       env->mode == 'B') {
+      closedir(dir);
+      return ftp_block_abort(env);
+    }
+  }
+
+  if(env->mode == 'B') {
+    closedir(dir);
+    return ftp_block_end(env);
   }
 
   if(ftp_data_close(env)) {
@@ -537,6 +670,34 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
   }
 
   return ftp_active_printf(env, "226 Transfer complete\r\n");
+}
+
+
+/**
+ * Set the transfer mode: stream (S), or block (B) where the data connection
+ * stays open between transfers.
+ **/
+int
+ftp_cmd_MODE(ftp_env_t *env, const char* arg) {
+  if(!arg[0]) {
+    return ftp_active_printf(env, "501 Usage: MODE <S|B>\r\n");
+  }
+
+  if(!strcasecmp(arg, "S")) {
+    // in stream mode, closing the data connection ends each transfer
+    if(env->data_fd != -1) {
+      ftp_data_close(env);
+    }
+    env->mode = 'S';
+
+  } else if(!strcasecmp(arg, "B")) {
+    env->mode = 'B';
+
+  } else {
+    return ftp_active_printf(env, "504 Unsupported transfer mode.\r\n");
+  }
+
+  return ftp_active_printf(env, "200 Mode set to %c.\r\n", env->mode);
 }
 
 
@@ -563,6 +724,7 @@ ftp_cmd_PORT(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: PORT <addr>\r\n");
   }
 
+  // a new data connection replaces the one kept open in block mode
   if(env->data_fd != -1) {
     ftp_data_close(env);
   }
@@ -579,6 +741,7 @@ ftp_cmd_PORT(ftp_env_t *env, const char* arg) {
   env->data_addr.sin_family = AF_INET;
   env->data_addr.sin_addr.s_addr = s_addr;
   env->data_addr.sin_port = port;
+  env->data_pending = 1;
 
   return ftp_active_printf(env, "200 PORT command successful.\r\n");
 }
@@ -619,6 +782,39 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
 
 
 /**
+ * Transfer N bytes from a given file in block mode.
+ **/
+static int
+ftp_cmd_RETR_block(ftp_env_t *env, int fd, size_t size) {
+  size_t len;
+  int err;
+
+  if((err=ftp_block_begin(env, "150 Starting data transfer\r\n"))) {
+    return err > 0 ? 0 : err;
+  }
+
+  while(size) {
+    len = size;
+    if(len > env->readbuf_size) {
+      len = env->readbuf_size;
+    }
+
+    if(io_nread(fd, env->readbuf, len)) {
+      ftp_data_fail(env);
+      return ftp_perror(env);
+    }
+    if(io_block_write(&env->data_writer, env->readbuf, len)) {
+      return ftp_block_abort(env);
+    }
+
+    size -= len;
+  }
+
+  return ftp_block_end(env);
+}
+
+
+/**
  * Retreive data from a given file.
  **/
 static int
@@ -631,6 +827,10 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd, off_t off) {
   }
   if(lseek(fd, off, SEEK_SET) < 0) {
     return ftp_perror(env);
+  }
+
+  if(env->mode == 'B') {
+    return ftp_cmd_RETR_block(env, fd, st.st_size - off);
   }
 
   if(ftp_active_printf(env, "150 Starting data transfer\r\n")) {
@@ -660,14 +860,21 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd, off_t off) {
  **/
 static int
 ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd, off_t off) {
+  int code = 150;
   FILE* tmpf;
   int err;
+
+  // the preliminary reply ends with 125 when block mode reuses the data
+  // connection, and its first lines must have the same code
+  if(env->mode == 'B' && !env->data_pending) {
+    code = 125;
+  }
 
   if(!(tmpf=tmpfile())) {
     return ftp_perror(env);
   }
 
-  if(ftp_active_printf(env, "150-Extracting ELF...\r\n")) {
+  if(ftp_active_printf(env, "%d-Extracting ELF...\r\n", code)) {
     fclose(tmpf);
     return -1;
   }
@@ -677,7 +884,7 @@ ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd, off_t off) {
       fclose(tmpf);
       return err;
     }
-    if(ftp_active_printf(env, "150-Warning: ELF digest mismatch\r\n")) {
+    if(ftp_active_printf(env, "%d-Warning: ELF digest mismatch\r\n", code)) {
       fclose(tmpf);
       return -1;
     }
@@ -705,6 +912,10 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
 
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: RETR <PATH>\r\n");
+  }
+
+  if(env->mode == 'B' && !ftp_block_ready(env)) {
+    return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
   }
 
   ftp_abspath(env, path, arg);
@@ -817,6 +1028,64 @@ ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
 
 
 /**
+ * Store data received in block mode in a given file, starting at a given
+ * offset.
+ **/
+static int
+ftp_cmd_STOR_block(ftp_env_t *env, int fd, off_t off) {
+  io_block_reader_t reader;
+  size_t size = 0;
+  ssize_t len;
+  int err;
+
+  if((err=ftp_block_begin(env, "150 Opening data transfer\r\n"))) {
+    return err > 0 ? 0 : err;
+  }
+
+  io_block_reader_init(&reader, env->data_fd);
+  while(1) {
+    // gather data from several blocks before writing it to the file
+    len = io_block_read(&reader, (char*)env->readbuf + size,
+			env->readbuf_size - size);
+    if(len > 0) {
+      size += len;
+      if(size < env->readbuf_size) {
+	continue;
+      }
+    }
+
+    if(size) {
+      if(io_nwrite(fd, env->readbuf, size)) {
+	ftp_data_fail(env);
+	return ftp_perror(env);
+      }
+      off += size;
+      size = 0;
+    }
+
+    if(len < 0) {
+      // keep the data received before the failure, but nothing past it
+      if(ftruncate(fd, off)) {
+	FTP_LOG_PERROR("ftruncate");
+      }
+      return ftp_block_abort(env);
+    }
+
+    if(!len) {
+      break;
+    }
+  }
+
+  if(ftruncate(fd, off)) {
+    ftp_data_fail(env);
+    return ftp_perror(env);
+  }
+
+  return ftp_active_printf(env, "250 Transfer complete.\r\n");
+}
+
+
+/**
  * Store recieved data in a given file.
  **/
 int
@@ -837,6 +1106,10 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "504 STOR in ASCII mode is not supported\r\n");
   }
 
+  if(env->mode == 'B' && !ftp_block_ready(env)) {
+    return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
+  }
+
   ftp_abspath(env, pathbuf, arg);
   if((fd=open(pathbuf, O_CREAT | O_WRONLY, 0777)) < 0) {
     return ftp_perror(env);
@@ -844,6 +1117,12 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
 
   if(lseek(fd, off, SEEK_CUR) < 0) {
     err = ftp_perror(env);
+    close(fd);
+    return err;
+  }
+
+  if(env->mode == 'B') {
+    err = ftp_cmd_STOR_block(env, fd, off);
     close(fd);
     return err;
   }

@@ -20,6 +20,8 @@ along with this program; see the file COPYING. If not, see
 #include <netinet/in.h>
 #include <unistd.h>
 
+#include "io.h"
+
 
 /**
  * Data structure that captures the current state of a client.
@@ -31,12 +33,16 @@ typedef struct ftp_env {
   char cwd[PATH_MAX];
 
   char type;
+  char mode;          // transfer mode: 'S' (stream) or 'B' (block)
+  int data_pending;   // PASV or PORT requested a new data connection
   int self2elf;
   off_t data_offset;
   char rename_path[PATH_MAX];
   struct sockaddr_in data_addr;
   void *readbuf;
   size_t readbuf_size;
+  void *blockbuf;     // IO_BLOCK_BUFSIZE bytes, used by data_writer
+  io_block_writer_t data_writer;
 } ftp_env_t;
 
 
@@ -57,6 +63,7 @@ int ftp_cmd_FEAT(ftp_env_t *env, const char* arg);
 int ftp_cmd_LIST(ftp_env_t *env, const char* arg);
 int ftp_cmd_MKD (ftp_env_t *env, const char* arg);
 int ftp_cmd_MLSD(ftp_env_t *env, const char* arg);
+int ftp_cmd_MODE(ftp_env_t *env, const char* arg);
 int ftp_cmd_NOOP(ftp_env_t *env, const char* arg);
 int ftp_cmd_PASV(ftp_env_t *env, const char* arg);
 int ftp_cmd_PORT(ftp_env_t *env, const char* arg);
