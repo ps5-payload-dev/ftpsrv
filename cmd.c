@@ -494,6 +494,7 @@ int
 ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   const char *p = env->cwd;
   char pathbuf[PATH_MAX*3];
+  char dirbuf[PATH_MAX];
   struct dirent *ent;
   struct stat statbuf;
   char timebuf[20];
@@ -507,7 +508,8 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   }
 
   if(arg[0] && arg[0] != '-') {
-    p = arg;
+    ftp_abspath(env, dirbuf, arg);
+    p = dirbuf;
   }
 
   if(!(dir=opendir(p))) {
@@ -530,12 +532,7 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   }
 
   while((ent=readdir(dir))) {
-    if(p[0] == '/') {
-      snprintf(pathbuf, sizeof(pathbuf), "%s/%s", p, ent->d_name);
-    } else {
-      snprintf(pathbuf, sizeof(pathbuf), "/%s/%s/%s", env->cwd, p,
-	       ent->d_name);
-    }
+    snprintf(pathbuf, sizeof(pathbuf), "%s/%s", p, ent->d_name);
 
     if(stat(pathbuf, &statbuf) != 0) {
       continue;
