@@ -16,6 +16,24 @@ Note: the SELF command operates on induvidual connections so use e.g.,
 john@localhost:ftpsrv$ curl -o libkernel.sprx -Q SELF ftp://ps5:2121/system/common/lib/libkernel.sprx
 ```
 
+Besides the default stream mode, the server supports block mode (`MODE B`,
+[RFC 959][rfc959] section 3.4.2) with a persistent data connection. In stream
+mode, closing the data connection marks the end of a file, so every transfer
+needs a new `PASV`/`PORT` and a new TCP connection. In block mode, data is sent
+in blocks and the end of a file is an EOF block, so a client can set up the data
+connection once and reuse it for any number of `STOR`, `APPE`, `RETR`, `LIST`
+and `MLSD` commands, which is much faster when transferring many small files:
+ - `MODE B` and `MODE S` switch between the modes (`200`); `MODE S` closes a
+   data connection kept open by block mode.
+ - A transfer that opens the connection requested by `PASV` or `PORT` starts
+   with `150`; one that reuses the connection kept open by the previous transfer
+   starts with `125`; without either, it is refused with `425`.
+ - A successful transfer ends with `250 Transfer complete.` and keeps the data
+   connection open. A data connection closed before the EOF block, or an
+   invalid block, fails the transfer with `426` and closes the connection.
+ - `PASV` and `PORT` close a kept data connection. `REST` offsets work as in
+   stream mode.
+
 ## Building for the PS4
 Assuming you have the [ps4-payload-sdk][sdk-ps4] installed on a POSIX machine,
 the FTP server can be compiled using the following two commands:
@@ -36,7 +54,11 @@ john@localhost:ftpsrv$ make -f Makefile.ps5
 Assuming you have a compiler toolchain installed on your GNU/Linux system,
 the FTP server can be compiled using the following command:
 ```console
-john@localhost:ftpsrv$ make -f Makefile.posix
+john@localhost:ftpsrv$ make -f Makefile.linux
+```
+The block mode tests start the server on a free port and need Python 3:
+```console
+john@localhost:ftpsrv$ test/test-mode-b.py --server ./ftpsrv-posix.elf
 ```
 
 ## Installing on the PS5
@@ -68,6 +90,7 @@ to discuss the solution properly before you commit time and effort.
 ## License
 ftpsrv is licensed under the GPLv3+.
 
+[rfc959]: https://www.rfc-editor.org/rfc/rfc959
 [sdk-ps4]: https://github.com/ps4-payload-dev/sdk
 [sdk-ps5]: https://github.com/ps5-payload-dev/sdk
 [websrv]: https://github.com/ps5-payload-dev/websrv
