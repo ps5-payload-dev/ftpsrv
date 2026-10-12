@@ -591,7 +591,7 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
     }
 
     ftp_mode_string(statbuf.st_mode, modebuf);
-    gmtime_r(&statbuf.st_ctim.tv_sec, &tm);
+    gmtime_r(&statbuf.st_mtim.tv_sec, &tm);
     strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", &tm);
     if(ftp_data_printf(env, "%s %lu %lu %lu %llu %s %s\r\n", modebuf,
 		       statbuf.st_nlink, statbuf.st_uid, statbuf.st_gid,
@@ -698,7 +698,7 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
       statbuf.st_size = self_get_elfsize(pathbuf);
     }
 
-    gmtime_r(&statbuf.st_ctim.tv_sec, &tm);
+    gmtime_r(&statbuf.st_mtim.tv_sec, &tm);
     strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", &tm);
 
     if(ftp_data_printf(env, "type=%s;size=%llu;modify=%s; %s\r\n",

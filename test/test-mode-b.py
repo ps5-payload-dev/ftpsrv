@@ -858,6 +858,38 @@ def mlsd_directory_argument():
 
 
 @test
+def listing_mtime():
+    if not CFG.local:
+        raise Skip("requires local files to set the modification time")
+    name = "mtime-marker.bin"
+    modified = 946684800
+    with Ftp() as ftp:
+        ftp.must("MKD " + path("listing-mtime"), 226)
+        ftp.must("CWD " + CFG.dir, 250)
+        ftp.pasv()
+        ftp.stor_s(path("listing-mtime/" + name), b"marker")
+        os.utime(path("listing-mtime/" + name), (modified, modified))
+        ftp.must("CHMOD 644 " + path("listing-mtime/" + name), 200)
+        for mode in ("S", "B"):
+            ftp.must("MODE " + mode, 200)
+            for command, fmt in (("MLSD", "%Y%m%d%H%M%S"),
+                                 ("LIST", "%b %d %H:%M")):
+                ftp.pasv()
+                request = command + " listing-mtime"
+                if mode == "S":
+                    listing = ftp.list_s(request)
+                else:
+                    listing, _ = ftp.list_b(request)
+                line = next(line for line in listing.splitlines()
+                            if line.endswith(" " + name))
+                stamp = time.strftime(fmt, time.gmtime(modified))
+                if command == "MLSD":
+                    assert "modify=%s;" % stamp in line, line
+                else:
+                    assert stamp + " " + name in line, line
+
+
+@test
 def list_and_mlsd():
     names = ["list-a.txt", "list-b.bin", "list dir"]
     with Ftp() as ftp:
