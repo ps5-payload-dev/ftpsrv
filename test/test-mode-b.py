@@ -338,27 +338,27 @@ def check_file(name, expected):
             assert f.read() == expected, name + ": different on disk"
 
 
-def make_self(segment, good_digest=True):
+def make_self(segment, good_digest=True, phoff=64):
     """Build a minimal PS4 SELF with one plaintext segment, and the ELF the
     server extracts from it."""
     p_offset = 0x1000
     ehdr = struct.pack("<16sHHIQQQIHHHHHH", b"\x7fELF\x02\x01\x01" + bytes(9),
-                       2, 0x3e, 1, 0, 64, 0, 0, 64, 56, 1, 0, 0, 0)
+                       2, 0x3e, 1, 0, phoff, 0, 0, 64, 56, 1, 0, 0, 0)
     phdr = struct.pack("<IIQQQQQQ", 1, 5, p_offset, 0, 0, len(segment),
                        len(segment), 0x1000)
     elf_off = 32 + 32                     # header + one entry
-    ext_off = (elf_off + 64 + 56 + 15) & ~15
+    ext_off = (elf_off + phoff + 56 + 15) & ~15
     seg_off = ext_off + 64
     elf = bytearray(p_offset + len(segment))
     elf[0:64] = ehdr
-    elf[64:120] = phdr
+    elf[phoff:phoff + 56] = phdr
     elf[p_offset:] = segment
     digest = hashlib.sha256(elf).digest() if good_digest else bytes(32)
     head = struct.pack("<IBBBBIHHQHH4x", 0x1D3D154F, 0, 0, 1, 0, 0, elf_off, 0,
                        seg_off + len(segment), 1, 0)
     entry = struct.pack("<QQQQ", 1 << 11, seg_off, len(segment), len(segment))
     ext = struct.pack("<QQQQ32s", 0, 0, 0, 0, digest)
-    data = head + entry + ehdr + phdr
+    data = head + entry + ehdr + bytes(phoff - 64) + phdr
     data += bytes(ext_off - len(data)) + ext + segment
     return data, bytes(elf)
 
@@ -1193,6 +1193,30 @@ def active_mode():
         assert ftp.retr_b(path("active5.bin")) == (data[:20], 150)
     check_file("active2.bin", data)
     check_file("active3.bin", b"")
+
+
+@test
+def self_program_headers():
+    segment = random_bytes(3000, 19)
+    wrapped, elf = make_self(segment, phoff=128)
+    with Ftp() as ftp:
+        ftp.must("SELF", 226, "226 SELF transfer mode disabled")
+        ftp.pasv()
+        ftp.stor_s(path("offset-headers.self"), wrapped)
+        ftp.must("SELF", 226, "226 SELF transfer mode enabled")
+        ftp.must("SIZE " + path("offset-headers.self"), 213, "213 %d" % len(elf))
+        for mode in ("S", "B"):
+            ftp.must("MODE " + mode, 200)
+            ftp.pasv()
+            code, lines = ftp.start("RETR " + path("offset-headers.self"), (150,))
+            assert lines == ["150-Extracting ELF...", "150 Starting data transfer"], lines
+            if mode == "S":
+                assert recv_all(ftp.data) == elf
+                ftp.drop_data()
+                ftp.finish(226, "226 Transfer completed")
+            else:
+                assert recv_blocks(ftp.data) == elf
+                ftp.finish(250, "250 Transfer complete.")
 
 
 @test

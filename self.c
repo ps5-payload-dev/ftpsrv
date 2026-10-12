@@ -278,7 +278,7 @@ self_extract_elf(int self_fd, int elf_fd) {
   }
 
   // Write the ELF header
-  if(io_nwrite(elf_fd, &ehdr, sizeof(ehdr))) {
+  if(io_pwrite(elf_fd, &ehdr, sizeof(ehdr), 0)) {
     free(entries);
     return -1;
   }
@@ -290,7 +290,8 @@ self_extract_elf(int self_fd, int elf_fd) {
       free(entries);
       return -1;
     }
-    if(io_nwrite(elf_fd, &phdr, sizeof(phdr))) {
+    if(io_pwrite(elf_fd, &phdr, sizeof(phdr),
+                 ehdr.e_phoff + i * sizeof(phdr))) {
       free(entries);
       return -1;
     }
