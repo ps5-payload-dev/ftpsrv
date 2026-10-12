@@ -24,6 +24,7 @@ along with this program; see the file COPYING. If not, see
 #include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -104,10 +105,10 @@ static int nb_ftp_commands = (sizeof(commands)/sizeof(ftp_command_t));
  **/
 static char*
 ftp_readline(int fd) {
-  int bufsize = 1024;
-  int position = 0;
+  size_t bufsize = 1024;
+  size_t position = 0;
   char *buffer_backup;
-  char *buffer = calloc(bufsize, sizeof(char));
+  char *buffer = malloc(bufsize);
   char c;
 
   if(!buffer) {
@@ -116,7 +117,7 @@ ftp_readline(int fd) {
   }
 
   while(1) {
-    int len = read(fd, &c, 1);
+    ssize_t len = read(fd, &c, 1);
     if(len == -1 && errno == EINTR) {
       continue;
     }
@@ -126,19 +127,21 @@ ftp_readline(int fd) {
       return NULL;
     }
 
-    if(c == '\r') {
-      buffer[position] = '\0';
-      position = 0;
-      continue;
-    }
-
     if(c == '\n') {
+      if(position && buffer[position-1] == '\r') {
+	position--;
+      }
+      buffer[position] = '\0';
       return buffer;
     }
 
-    buffer[position++] = c;
-
-    if(position >= bufsize) {
+    if(position >= bufsize-1) {
+      if(bufsize > SIZE_MAX-1024) {
+	errno = ENOMEM;
+	FTP_LOG_PERROR("realloc");
+	free(buffer);
+	return NULL;
+      }
       bufsize += 1024;
       buffer_backup = buffer;
       buffer = realloc(buffer, bufsize);
@@ -148,7 +151,8 @@ ftp_readline(int fd) {
 	return NULL;
       }
     }
-    buffer[position] = '\0';
+
+    buffer[position++] = c;
   }
 }
 

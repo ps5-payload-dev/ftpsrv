@@ -379,6 +379,14 @@ def control_line_boundaries():
 
 
 @test
+def control_embedded_cr():
+    with Ftp() as ftp:
+        ftp.sock.sendall(b"NOOP\rNOOP\r\n")
+        assert ftp.reply()[0] == 502
+        ftp.must("NOOP", 200)
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")
