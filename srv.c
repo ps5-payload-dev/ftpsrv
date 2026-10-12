@@ -264,15 +264,15 @@ ftp_thread(void *args) {
     free(line);
   }
 
-  if(env.active_fd > 0) {
+  if(env.active_fd >= 0) {
     close(env.active_fd);
   }
 
-  if(env.passive_fd > 0) {
+  if(env.passive_fd >= 0) {
     close(env.passive_fd);
   }
 
-  if(env.data_fd > 0) {
+  if(env.data_fd >= 0) {
     close(env.data_fd);
   }
 
