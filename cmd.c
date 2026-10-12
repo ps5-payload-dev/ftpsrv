@@ -235,6 +235,9 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   }
   addr = sockaddr.sin_addr.s_addr;
 
+  // forget the address given by a previous PORT command
+  memset(&env->data_addr, 0, sizeof(env->data_addr));
+
   if(env->passive_fd > 0) {
     close(env->passive_fd);
   }
@@ -251,18 +254,21 @@ ftp_cmd_PASV(ftp_env_t *env, const char* arg) {
   if(bind(env->passive_fd, (struct sockaddr*)&sockaddr, sockaddr_len) != 0) {
     ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
   if(listen(env->passive_fd, 1) != 0) {
     ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
 
   if(getsockname(env->passive_fd, (struct sockaddr*)&sockaddr, &sockaddr_len)) {
     ret = ftp_perror(env);
     close(env->passive_fd);
+    env->passive_fd = -1;
     return ret;
   }
   port = sockaddr.sin_port;
@@ -559,6 +565,12 @@ ftp_cmd_PORT(ftp_env_t *env, const char* arg) {
 
   if(env->data_fd != -1) {
     ftp_data_close(env);
+  }
+
+  // stop listening for a connection requested by a previous PASV command
+  if(env->passive_fd > 0) {
+    close(env->passive_fd);
+    env->passive_fd = -1;
   }
 
   s_addr = (addr[3] << 24) | (addr[2] << 16) | (addr[1] << 8) | addr[0];
