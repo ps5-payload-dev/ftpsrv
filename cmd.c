@@ -622,8 +622,7 @@ ftp_cmd_REST(ftp_env_t *env, const char* arg) {
  * Retreive data from a given file.
  **/
 static int
-ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
-  off_t off = env->data_offset;
+ftp_cmd_RETR_fd(ftp_env_t *env, int fd, off_t off) {
   struct stat st;
   int err = 0;
 
@@ -652,8 +651,6 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
     return ftp_perror(env);
   }
 
-  env->data_offset = 0;
-
   return ftp_active_printf(env, "226 Transfer completed\r\n");
 }
 
@@ -662,7 +659,7 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd) {
  * Retreive an ELF file embedded within a SELF file.
  **/
 static int
-ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd) {
+ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd, off_t off) {
   FILE* tmpf;
   int err;
 
@@ -687,7 +684,7 @@ ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd) {
   }
 
   rewind(tmpf);
-  err = ftp_cmd_RETR_fd(env, fileno(tmpf));
+  err = ftp_cmd_RETR_fd(env, fileno(tmpf), off);
   fclose(tmpf);
 
   return err;
@@ -699,9 +696,12 @@ ftp_cmd_RETR_self2elf(ftp_env_t *env, int fd) {
  **/
 int
 ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
+  off_t off = env->data_offset;
   char path[PATH_MAX];
   int err;
   int fd;
+
+  env->data_offset = 0;
 
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: RETR <PATH>\r\n");
@@ -713,9 +713,9 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
   }
 
   if(env->self2elf && self_is_valid(path) == 1) {
-    err = ftp_cmd_RETR_self2elf(env, fd);
+    err = ftp_cmd_RETR_self2elf(env, fd, off);
   } else {
-    err = ftp_cmd_RETR_fd(env, fd);
+    err = ftp_cmd_RETR_fd(env, fd, off);
   }
 
   close(fd);
