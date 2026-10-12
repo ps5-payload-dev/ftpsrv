@@ -433,6 +433,24 @@ def long_control_and_data_replies():
 
 
 @test
+def rest_validation():
+    payload = b"restart checks"
+    with Ftp() as ftp:
+        ftp.pasv()
+        ftp.stor_s(path("rest-validation.bin"), payload)
+        for mode in ("S", "B"):
+            ftp.must("MODE " + mode, 200)
+            ftp.must("REST 3", 350)
+            for arg in ("-1", "abc", "1x", "99999999999999999999999999999"):
+                ftp.must("REST " + arg, 501)
+            ftp.pasv()
+            if mode == "S":
+                assert ftp.retr_s(path("rest-validation.bin")) == payload[3:]
+            else:
+                assert ftp.retr_b(path("rest-validation.bin")) == (payload[3:], 150)
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")

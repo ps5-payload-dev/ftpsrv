@@ -912,11 +912,21 @@ ftp_cmd_QUIT(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_REST(ftp_env_t *env, const char* arg) {
+  intmax_t off;
+  char *end;
+
   if(!arg[0]) {
     return ftp_active_printf(env, "501 Usage: REST <OFFSET>\r\n");
   }
 
-  env->data_offset = atol(arg);
+  errno = 0;
+  off = strtoimax(arg, &end, 10);
+  if(arg[0] < '0' || arg[0] > '9' || *end || errno || off < 0 ||
+     (intmax_t)(off_t)off != off) {
+    return ftp_active_printf(env, "501 Invalid restart offset\r\n");
+  }
+
+  env->data_offset = (off_t)off;
 
   return ftp_active_printf(env, "350 REST OK\r\n");
 }
