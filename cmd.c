@@ -86,8 +86,8 @@ ftp_data_fail(ftp_env_t *env) {
  */
 int
 ftp_data_open(ftp_env_t *env) {
+  socklen_t addr_len = sizeof(struct sockaddr_in);
   struct sockaddr_in data_addr;
-  socklen_t addr_len;
   int opt;
 
   if(env->data_fd != -1) {
