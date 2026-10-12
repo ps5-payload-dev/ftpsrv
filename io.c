@@ -16,9 +16,11 @@ along with this program; see the file COPYING. If not, see
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <sys/errno.h>
+#include <sys/socket.h>
 
 #include "io.h"
 
@@ -170,3 +172,157 @@ io_pcopy(int fd_in, int fd_out, off_t off_in, off_t off_out, size_t size) {
   return 0;
 }
 
+
+/**
+ * Encode the header of a block.
+ **/
+static void
+io_block_header(unsigned char* hdr, unsigned char desc, size_t n) {
+  hdr[0] = desc;
+  hdr[1] = (n >> 8) & 0xff;
+  hdr[2] = n & 0xff;
+}
+
+
+/**
+ * Send the gathered data as a block, followed by an EOF block if requested,
+ * with a single write.
+ **/
+static int
+io_block_flush(io_block_writer_t* w, int eof) {
+  size_t size = 0;
+
+  if(w->len) {
+    io_block_header(w->buf, 0, w->len);
+    size = IO_BLOCK_HDRSIZE + w->len;
+  }
+  if(eof) {
+    io_block_header(w->buf + size, IO_BLOCK_EOF, 0);
+    size += IO_BLOCK_HDRSIZE;
+  }
+
+  w->len = 0;
+  if(!size) {
+    return 0;
+  }
+
+  return io_nwrite(w->fd, w->buf, size);
+}
+
+
+void
+io_block_writer_init(io_block_writer_t* w, int fd, void* buf) {
+  w->fd = fd;
+  w->buf = buf;
+  w->len = 0;
+}
+
+
+int
+io_block_write(io_block_writer_t* w, const void* buf, size_t n) {
+  const unsigned char* data = buf;
+  size_t count;
+
+  while(n) {
+    // a full block is sent only when more data follows, so that the last one
+    // goes out with the EOF block
+    if(w->len == IO_BLOCK_MAXSIZE && io_block_flush(w, 0)) {
+      return -1;
+    }
+
+    count = IO_BLOCK_MAXSIZE - w->len;
+    if(count > n) {
+      count = n;
+    }
+
+    memcpy(w->buf + IO_BLOCK_HDRSIZE + w->len, data, count);
+    w->len += count;
+    data += count;
+    n -= count;
+  }
+
+  return 0;
+}
+
+
+int
+io_block_write_eof(io_block_writer_t* w) {
+  return io_block_flush(w, 1);
+}
+
+
+void
+io_block_reader_init(io_block_reader_t* r, int fd) {
+  memset(r, 0, sizeof(*r));
+  r->fd = fd;
+}
+
+
+/**
+ * Receive up to N bytes from a block mode stream, where a connection closed by
+ * the peer is an error (the stream ends with an EOF block).
+ **/
+static ssize_t
+io_block_recv(int fd, void* buf, size_t n) {
+  ssize_t r;
+
+  while((r=recv(fd, buf, n, 0)) < 0) {
+    if(errno == EINTR) {
+      continue;
+    }
+    return -1;
+  }
+
+  if(!r) {
+    errno = EPIPE;
+    return -1;
+  }
+
+  return r;
+}
+
+
+ssize_t
+io_block_read(io_block_reader_t* r, void* buf, size_t n) {
+  ssize_t len;
+
+  while(1) {
+    // receive the header of the next block, possibly in several pieces
+    if(r->hdrlen < IO_BLOCK_HDRSIZE) {
+      if((len=io_block_recv(r->fd, r->hdr + r->hdrlen,
+			    IO_BLOCK_HDRSIZE - r->hdrlen)) < 0) {
+	return -1;
+      }
+      r->hdrlen += len;
+      if(r->hdrlen < IO_BLOCK_HDRSIZE) {
+	continue;
+      }
+
+      if(r->hdr[0] & ~(IO_BLOCK_EOR | IO_BLOCK_EOF | IO_BLOCK_ERRORS |
+		       IO_BLOCK_RESTART)) {
+	errno = EBADMSG;
+	return -1;
+      }
+      r->left = (r->hdr[1] << 8) | r->hdr[2];
+    }
+
+    // nothing follows the EOF block
+    if(!r->left) {
+      if(r->hdr[0] & IO_BLOCK_EOF) {
+	return 0;
+      }
+      r->hdrlen = 0;
+      continue;
+    }
+
+    if((len=io_block_recv(r->fd, buf, r->left < n ? r->left : n)) < 0) {
+      return -1;
+    }
+    r->left -= len;
+
+    // the data of a restart marker is not part of the file
+    if(!(r->hdr[0] & IO_BLOCK_RESTART)) {
+      return len;
+    }
+  }
+}
