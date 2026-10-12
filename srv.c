@@ -148,6 +148,7 @@ ftp_readline(int fd) {
 	return NULL;
       }
     }
+    buffer[position] = '\0';
   }
 }
 

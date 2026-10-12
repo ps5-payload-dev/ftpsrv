@@ -368,6 +368,17 @@ def make_self(segment, good_digest=True):
 
 
 @test
+def control_line_boundaries():
+    with Ftp() as ftp:
+        for n in (1023, 1024, 2047, 2048, 4095, 4096, 8192):
+            # MODE requires one character; a long LF-only argument must stay
+            # intact, terminated, and separate from the following command.
+            ftp.sock.sendall(b"MODE " + b"B" * (n - 5) + b"\nNOOP\n")
+            assert ftp.reply()[0] == 504, n
+            assert ftp.reply()[0] == 200, n
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")
