@@ -824,7 +824,7 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
   off_t off = env->data_offset;
   char pathbuf[PATH_MAX];
   int err = 0;
-  size_t len;
+  ssize_t len;
   int fd;
 
   env->data_offset = 0;
@@ -867,6 +867,13 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
       return err;
     }
     off += len;
+  }
+
+  if(len < 0) {
+    err = ftp_perror(env);
+    ftp_data_close(env);
+    close(fd);
+    return err;
   }
 
   if(ftruncate(fd, off)) {
