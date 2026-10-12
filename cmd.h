@@ -105,9 +105,9 @@ int ftp_active_printf(ftp_env_t *env, const char *fmt, ...);
 
 
 /**
- * Resolve a path to its absolute path.
+ * Resolve a path to its absolute path, returning -1 when it is too long.
  **/
-void ftp_abspath(ftp_env_t *env, char *abspath, const char *path);
+int ftp_abspath(ftp_env_t *env, char *abspath, const char *path);
 
 
 /**

@@ -291,16 +291,25 @@ ftp_perror(ftp_env_t *env) {
 /**
  * Create an absolute path from the current working directory.
  **/
-void
+int
 ftp_abspath(ftp_env_t *env, char *abspath, const char *path) {
-  char buf[PATH_MAX+1];
+  int len;
 
   if(path[0] != '/') {
-    snprintf(buf, sizeof(buf), "%s/%s", env->cwd, path);
-    strncpy(abspath, buf, PATH_MAX);
+    len = snprintf(abspath, PATH_MAX, "%s/%s", env->cwd, path);
   } else {
-    strncpy(abspath, path, PATH_MAX);
+    len = snprintf(abspath, PATH_MAX, "%s", path);
   }
+
+  if(len < 0 || len >= PATH_MAX) {
+    abspath[0] = '\0';
+    if(len >= PATH_MAX) {
+      errno = ENAMETOOLONG;
+    }
+    return -1;
+  }
+
+  return 0;
 }
 
 
@@ -415,7 +424,9 @@ ftp_cmd_CHMOD(ftp_env_t *env, const char* arg) {
   }
 
   mode = strtol(arg, 0, 8);
-  ftp_abspath(env, pathbuf, ptr+1);
+  if(ftp_abspath(env, pathbuf, ptr+1)) {
+    return ftp_perror(env);
+  }
 
   if(chmod(pathbuf, mode)) {
     return ftp_perror(env);
@@ -437,7 +448,9 @@ ftp_cmd_CWD(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: CWD <PATH>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if(stat(pathbuf, &st)) {
     return ftp_perror(env);
   }
@@ -463,7 +476,9 @@ ftp_cmd_DELE(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: DELE <FILENAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if(remove(pathbuf)) {
     return ftp_perror(env);
   }
@@ -508,7 +523,9 @@ ftp_cmd_LIST(ftp_env_t *env, const char* arg) {
   }
 
   if(arg[0] && arg[0] != '-') {
-    ftp_abspath(env, dirbuf, arg);
+    if(ftp_abspath(env, dirbuf, arg)) {
+      return ftp_perror(env);
+    }
     p = dirbuf;
   }
 
@@ -584,7 +601,9 @@ ftp_cmd_MKD(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: MKD <DIRNAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if(mkdir(pathbuf, 0777)) {
     return ftp_perror(env);
   }
@@ -728,7 +747,9 @@ ftp_cmd_NLST(ftp_env_t *env, const char* arg) {
   }
 
   if(p[0]) {
-    ftp_abspath(env, pathbuf, p);
+    if(ftp_abspath(env, pathbuf, p)) {
+      return ftp_perror(env);
+    }
   } else {
     snprintf(pathbuf, sizeof(pathbuf), "%s", env->cwd);
   }
@@ -1007,7 +1028,9 @@ ftp_cmd_RETR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
   }
 
-  ftp_abspath(env, path, arg);
+  if(ftp_abspath(env, path, arg)) {
+    return ftp_perror(env);
+  }
   if((fd=open(path, O_RDONLY, 0)) < 0) {
     return ftp_perror(env);
   }
@@ -1034,7 +1057,9 @@ ftp_cmd_RMD(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RMD <DIRNAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if(rmdir(pathbuf)) {
     return ftp_perror(env);
   }
@@ -1054,7 +1079,9 @@ ftp_cmd_RNFR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: RNFR <PATH>\r\n");
   }
 
-  ftp_abspath(env, env->rename_path, arg);
+  if(ftp_abspath(env, env->rename_path, arg)) {
+    return ftp_perror(env);
+  }
   if(stat(env->rename_path, &st)) {
     return ftp_perror(env);
   }
@@ -1079,7 +1106,9 @@ ftp_cmd_RNTO(ftp_env_t *env, const char* arg) {
     return ftp_perror(env);
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if(rename(env->rename_path, pathbuf)) {
     return ftp_perror(env);
   }
@@ -1101,7 +1130,9 @@ ftp_cmd_SIZE(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "501 Usage: SIZE <FILENAME>\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if(stat(pathbuf, &st)) {
     return ftp_active_printf(env, "550 No such file or directory\r\n");
   }
@@ -1199,7 +1230,9 @@ ftp_cmd_STOR(ftp_env_t *env, const char* arg) {
     return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
   }
 
-  ftp_abspath(env, pathbuf, arg);
+  if(ftp_abspath(env, pathbuf, arg)) {
+    return ftp_perror(env);
+  }
   if((fd=open(pathbuf, O_CREAT | O_WRONLY, 0777)) < 0) {
     return ftp_perror(env);
   }
@@ -1273,7 +1306,9 @@ ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
   }
 
   if(!env->data_offset) {
-    ftp_abspath(env, pathbuf, arg);
+    if(ftp_abspath(env, pathbuf, arg)) {
+      return ftp_perror(env);
+    }
     if(stat(pathbuf, &statbuf)) {
       // a file that does not exist is created, starting at offset 0
       if(errno != ENOENT) {

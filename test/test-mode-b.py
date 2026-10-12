@@ -387,6 +387,24 @@ def control_embedded_cr():
 
 
 @test
+def oversized_paths():
+    with Ftp() as ftp:
+        ftp.must("CWD " + CFG.dir, 250)
+        for name in ("/" + "x" * 8192, "x" * 8192):
+            for command in ("CWD", "DELE", "MKD", "RMD", "RNFR", "SIZE",
+                            "RETR", "STOR", "APPE", "LIST", "NLST"):
+                ftp.must(command + " " + name, 550)
+            ftp.must("CHMOD 755 " + name, 550)
+            ftp.must("PWD", 257, '257 "%s"' % CFG.dir)
+        ftp.pasv()
+        ftp.stor_s(path("rename-source.bin"), b"keep")
+        ftp.must("RNFR " + path("rename-source.bin"), 350)
+        ftp.must("RNTO /" + "x" * 8192, 550)
+        ftp.must("NOOP", 200)
+    check_file("rename-source.bin", b"keep")
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")
