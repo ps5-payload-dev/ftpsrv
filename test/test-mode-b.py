@@ -451,6 +451,29 @@ def rest_validation():
 
 
 @test
+def retr_offset_bounds():
+    payload = b"restart bounds"
+    with Ftp() as ftp:
+        ftp.pasv()
+        ftp.stor_s(path("retr-offset.bin"), payload)
+        for mode in ("S", "B"):
+            ftp.must("MODE " + mode, 200)
+            ftp.pasv()
+            ftp.must("REST %d" % (len(payload) + 1), 350)
+            ftp.must("RETR " + path("retr-offset.bin"), 550)
+            ftp.must("NOOP", 200)
+            if mode == "S":
+                assert ftp.retr_s(path("retr-offset.bin")) == payload
+                ftp.must("REST %d" % len(payload), 350)
+                ftp.pasv()
+                assert ftp.retr_s(path("retr-offset.bin")) == b""
+            else:
+                assert ftp.retr_b(path("retr-offset.bin")) == (payload, 150)
+                ftp.must("REST %d" % len(payload), 350)
+                assert ftp.retr_b(path("retr-offset.bin")) == (b"", 125)
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")

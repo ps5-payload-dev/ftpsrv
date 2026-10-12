@@ -976,6 +976,10 @@ ftp_cmd_RETR_fd(ftp_env_t *env, int fd, off_t off) {
   if(fstat(fd, &st)) {
     return ftp_perror(env);
   }
+  if(off < 0 || off > st.st_size) {
+    errno = EINVAL;
+    return ftp_perror(env);
+  }
   if(lseek(fd, off, SEEK_SET) < 0) {
     return ftp_perror(env);
   }
