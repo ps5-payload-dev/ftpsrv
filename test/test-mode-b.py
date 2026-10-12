@@ -405,6 +405,34 @@ def oversized_paths():
 
 
 @test
+def long_control_and_data_replies():
+    if not CFG.server or not CFG.local:
+        raise Skip("requires a local test server")
+    limit = os.pathconf(CFG.dir, "PC_PATH_MAX")
+    with Ftp() as ftp:
+        parent = path("long-replies")
+        ftp.must("MKD " + parent, 226)
+        while limit - 2 - len(parent) > 254:
+            parent += "/" + "d" * 200
+            ftp.must("MKD " + parent, 226)
+        final_len = limit - 2 - len(parent) - 1
+        directory = parent + "/" + "d" * final_len
+        filename = parent + "/" + "f" * (final_len + 1)
+        ftp.must("MKD " + directory, 226)
+        ftp.must("CWD " + directory, 250)
+        ftp.must("PWD", 257, '257 "%s"' % directory)
+        ftp.pasv()
+        ftp.stor_s(filename, b"long name")
+        for mode in ("S", "B"):
+            ftp.must("MODE " + mode, 200)
+            ftp.pasv()
+            if mode == "S":
+                assert ftp.list_s("NLST " + filename) == filename + "\r\n"
+            else:
+                assert ftp.list_b("NLST " + filename) == (filename + "\r\n", 150)
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")

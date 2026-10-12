@@ -149,23 +149,59 @@ ftp_data_write(ftp_env_t *env, const void *buf, size_t len) {
 
 
 /**
+ * Format and transmit a complete string via a control or data connection.
+ **/
+static int
+ftp_vprintf(ftp_env_t *env, int data, const char *fmt, va_list args) {
+  char buf[0x1000];
+  char *out = buf;
+  va_list copy;
+  int len, err;
+
+  va_copy(copy, args);
+  len = vsnprintf(buf, sizeof(buf), fmt, copy);
+  va_end(copy);
+  if(len < 0) {
+    return -1;
+  }
+
+  if((size_t)len >= sizeof(buf)) {
+    if(!(out=malloc((size_t)len + 1))) {
+      return -1;
+    }
+    va_copy(copy, args);
+    err = vsnprintf(out, (size_t)len + 1, fmt, copy);
+    va_end(copy);
+    if(err != len) {
+      free(out);
+      errno = EIO;
+      return -1;
+    }
+  }
+
+  err = data ? ftp_data_write(env, out, len) :
+    io_nwrite(env->active_fd, out, len);
+  if(out != buf) {
+    free(out);
+  }
+
+  return err;
+}
+
+
+/**
  * Transmit a formatted string via an existing data connection.
  **/
 static int
 ftp_data_printf(ftp_env_t *env, const char *fmt, ...) {
-  char buf[0x1000];
-  size_t len = 0;
   va_list args;
+  int err;
 
   va_start(args, fmt);
-  len = vsnprintf(buf, sizeof(buf), fmt, args);
+  err = ftp_vprintf(env, 1, fmt, args);
   va_end(args);
 
-  if(ftp_data_write(env, buf, len)) {
-    return -1;
-  }
-
-  return 0;
+  return err;
 }
 
 
@@ -257,19 +293,14 @@ ftp_block_end(ftp_env_t *env) {
  **/
 int
 ftp_active_printf(ftp_env_t *env, const char *fmt, ...) {
-  char buf[0x1000];
-  size_t len = 0;
   va_list args;
+  int err;
 
   va_start(args, fmt);
-  len = vsnprintf(buf, sizeof(buf), fmt, args);
+  err = ftp_vprintf(env, 0, fmt, args);
   va_end(args);
 
-  if(io_nwrite(env->active_fd, buf, len)) {
-    return -1;
-  }
-
-  return 0;
+  return err;
 }
 
 
