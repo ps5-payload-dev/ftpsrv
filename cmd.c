@@ -68,6 +68,20 @@ ftp_mode_string(mode_t mode, char *buf) {
 
 
 /**
+ * Close the data connection after a failure, preserving errno.
+ **/
+static int
+ftp_data_fail(ftp_env_t *env) {
+  int err = errno;
+
+  ftp_data_close(env);
+  errno = err;
+
+  return -1;
+}
+
+
+/**
  * Open the data connection.
  */
 int
@@ -77,13 +91,16 @@ ftp_data_open(ftp_env_t *env) {
   int opt;
 
   if(env->data_fd != -1) {
-    close(env->data_fd);
+    ftp_data_close(env);
   }
 
   if(env->data_addr.sin_port) {
+    if((env->data_fd=socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+      return -1;
+    }
     if(connect(env->data_fd, (struct sockaddr*)&env->data_addr,
 	       sizeof(env->data_addr))) {
-      return -1;
+      return ftp_data_fail(env);
     }
   } else {
     if((env->data_fd=accept(env->passive_fd, (struct sockaddr*)&data_addr,
@@ -94,10 +111,10 @@ ftp_data_open(ftp_env_t *env) {
 
   opt = 0x100000;
   if(setsockopt(env->data_fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt)) < 0) {
-    return -1;
+    return ftp_data_fail(env);
   }
   if(setsockopt(env->data_fd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt)) < 0) {
-    return -1;
+    return ftp_data_fail(env);
   }
 
   return 0;
@@ -139,11 +156,12 @@ ftp_data_read(ftp_env_t *env, void *buf, size_t count) {
  **/
 int
 ftp_data_close(ftp_env_t *env) {
-  if(close(env->data_fd)) {
-    return -1;
-  }
+  int fd = env->data_fd;
 
   env->data_fd = -1;
+  if(close(fd)) {
+    return -1;
+  }
 
   return 0;
 }
@@ -540,10 +558,7 @@ ftp_cmd_PORT(ftp_env_t *env, const char* arg) {
   }
 
   if(env->data_fd != -1) {
-    close(env->data_fd);
-  }
-  if((env->data_fd=socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    return ftp_perror(env);
+    ftp_data_close(env);
   }
 
   s_addr = (addr[3] << 24) | (addr[2] << 16) | (addr[1] << 8) | addr[0];
