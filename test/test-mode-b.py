@@ -392,7 +392,7 @@ def oversized_paths():
         ftp.must("CWD " + CFG.dir, 250)
         for name in ("/" + "x" * 8192, "x" * 8192):
             for command in ("CWD", "DELE", "MKD", "RMD", "RNFR", "SIZE",
-                            "RETR", "STOR", "APPE", "LIST", "NLST"):
+                            "RETR", "STOR", "APPE", "LIST", "MLSD", "NLST"):
                 ftp.must(command + " " + name, 550)
             ftp.must("CHMOD 755 " + name, 550)
             ftp.must("PWD", 257, '257 "%s"' % CFG.dir)
@@ -831,6 +831,30 @@ def retr_block():
         assert ftp.cmd("RETR " + path("nothing.bin"))[0] == 550
         ftp.stor_b(path("retr3.bin"), b"hello", (125,))
     check_file("retr3.bin", b"hello")
+
+
+@test
+def mlsd_directory_argument():
+    name = "mtime-marker.bin"
+    with Ftp() as ftp:
+        ftp.must("MKD " + path("mlsd-target"), 226)
+        ftp.must("CWD " + CFG.dir, 250)
+        ftp.pasv()
+        ftp.stor_s(path("mlsd-target/" + name), b"marker")
+        for mode in ("S", "B"):
+            ftp.must("MODE " + mode, 200)
+            for directory in ("mlsd-target", path("mlsd-target")):
+                ftp.pasv()
+                if mode == "S":
+                    listing = ftp.list_s("MLSD " + directory)
+                else:
+                    listing, _ = ftp.list_b("MLSD " + directory)
+                line = next(line for line in listing.splitlines()
+                            if line.endswith(" " + name))
+                assert "type=file;size=6;" in line, line
+                assert not any(line.endswith(" mlsd-target")
+                               for line in listing.splitlines()), listing
+            ftp.must("MLSD no-such-directory", 550)
 
 
 @test

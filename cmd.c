@@ -648,7 +648,9 @@ ftp_cmd_MKD(ftp_env_t *env, const char* arg) {
  **/
 int
 ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
+  const char *p = env->cwd;
   char pathbuf[PATH_MAX*3];
+  char dirbuf[PATH_MAX];
   struct stat statbuf;
   struct dirent *ent;
   char timebuf[20];
@@ -660,7 +662,14 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
     return ftp_active_printf(env, "425 Use PORT or PASV first.\r\n");
   }
 
-  if(!(dir=opendir(env->cwd))) {
+  if(arg[0]) {
+    if(ftp_abspath(env, dirbuf, arg)) {
+      return ftp_perror(env);
+    }
+    p = dirbuf;
+  }
+
+  if(!(dir=opendir(p))) {
     return ftp_perror(env);
   }
 
@@ -680,7 +689,7 @@ ftp_cmd_MLSD(ftp_env_t *env, const char *arg) {
   }
 
   while((ent=readdir(dir))) {
-    snprintf(pathbuf, sizeof(pathbuf), "/%s/%s", env->cwd, ent->d_name);
+    snprintf(pathbuf, sizeof(pathbuf), "%s/%s", p, ent->d_name);
     if(stat(pathbuf, &statbuf) != 0) {
       continue;
     }
