@@ -1183,7 +1183,11 @@ ftp_cmd_APPE(ftp_env_t *env, const char* arg) {
   if(!env->data_offset) {
     ftp_abspath(env, pathbuf, arg);
     if(stat(pathbuf, &statbuf)) {
-      return ftp_perror(env);
+      // a file that does not exist is created, starting at offset 0
+      if(errno != ENOENT) {
+	return ftp_perror(env);
+      }
+      statbuf.st_size = 0;
     }
     env->data_offset = statbuf.st_size;
   }
