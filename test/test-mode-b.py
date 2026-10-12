@@ -54,12 +54,17 @@ import sys
 import tempfile
 import time
 import traceback
+import urllib.parse
 
 
 EOF_BLOCK = b"\x40\x00\x00"
 
 TESTS = []
 CFG = None
+
+
+class Skip(Exception):
+    pass
 
 
 def test(func):
@@ -405,14 +410,11 @@ def no_data_connection():
     with Ftp() as ftp:
         ftp.must("MODE B", 200)
         for line in ("STOR " + path("never.bin"), "RETR " + path("never.bin"),
-                     "APPE " + path("never.bin"), "LIST " + CFG.dir, "MLSD"):
+                     "APPE " + path("never.bin"), "LIST " + CFG.dir, "MLSD",
+                     "NLST", "NLST -a " + CFG.dir):
             got, lines = ftp.cmd(line)
-            if line.startswith("APPE"):
-                # APPE first looks for the file to append to
-                assert got == 550, lines
-            else:
-                assert lines[-1] == "425 Use PORT or PASV first.", (line, lines)
-    assert remote_size("never.bin") is None, "STOR created a file"
+            assert lines[-1] == "425 Use PORT or PASV first.", (line, lines)
+    assert remote_size("never.bin") is None, "STOR or APPE created a file"
 
     # a data connection set up and used in stream mode is not kept
     with Ftp() as ftp:
@@ -446,6 +448,32 @@ def appe_and_rest():
         # an empty APPE keeps the file as it is
         assert ftp.stor_b(path("appe.bin"), b"", verb="APPE") == 125
         check_file("appe.bin", base[:10] + more)
+
+
+@test
+def appe_new_file():
+    with Ftp() as ftp:
+        ftp.pasv()
+        ftp.stor_s(path("appe-new1.bin"), b"stream", verb="APPE")
+        ftp.must("MODE B", 200)
+        ftp.pasv()
+        ftp.stor_b(path("appe-new2.bin"), b"block", (150,), verb="APPE")
+        ftp.stor_b(path("appe-new2.bin"), b" more", (125,), verb="APPE")
+        ftp.stor_b(path("appe-new3.bin"), b"", (125,), verb="APPE")
+        # REST still gives the offset
+        ftp.must("REST 3", 350)
+        ftp.stor_b(path("appe-new4.bin"), b"abc", (125,), verb="APPE")
+        # other errors are still reported, before the transfer starts
+        got, lines = ftp.cmd("APPE " + path("no-such-dir/x.bin"))
+        assert got == 550, lines
+        got, lines = ftp.cmd("APPE " + path("appe-new2.bin/x.bin"))
+        assert got == 550, lines
+        ftp.stor_b(path("appe-new5.bin"), b"kept", (125,), verb="APPE")
+    check_file("appe-new1.bin", b"stream")
+    check_file("appe-new2.bin", b"block more")
+    check_file("appe-new3.bin", b"")
+    check_file("appe-new4.bin", b"\0\0\0abc")
+    check_file("appe-new5.bin", b"kept")
 
 
 @test
@@ -734,8 +762,151 @@ def list_and_mlsd():
 
 
 @test
+def list_relative_path():
+    with Ftp() as ftp:
+        ftp.must("MKD " + path("rel"), 226)
+        ftp.must("MKD " + path("rel/sub dir"), 226)
+        ftp.pasv()
+        ftp.stor_s(path("rel/sub dir/inside.txt"), b"x")
+        ftp.must("CWD " + path("rel"), 250)
+        ftp.pasv()
+        text = ftp.list_s("LIST sub dir")
+        assert "inside.txt" in text, text
+        ftp.pasv()
+        assert ftp.list_s("LIST " + path("rel/sub dir")) == text
+        assert ftp.cmd("LIST missing")[0] == 550
+        ftp.must("MODE B", 200)
+        ftp.pasv()
+        assert ftp.list_b("LIST sub dir", (150,))[0] == text
+        ftp.must("CWD sub dir", 250)
+        assert ftp.list_b("LIST .", (125,))[0] == text
+        assert ftp.list_b("LIST", (125,))[0] == text
+
+
+NLST_NAMES = ["a file.txt", ".hidden", "a\u00e7\u00e3o \u00fc \u65e5\u672c.txt",
+              "-dash", "sub dir", "empty"]
+
+
+def make_nlst_dir(ftp, name):
+    """Create a directory for the NLST tests, in stream mode."""
+    top = path(name)
+    ftp.must("MKD " + top, 226)
+    for entry in NLST_NAMES[:4]:
+        ftp.pasv()
+        ftp.stor_s(top + "/" + entry, b"x")
+    ftp.must("MKD " + top + "/sub dir", 226)
+    ftp.pasv()
+    ftp.stor_s(top + "/sub dir/x", b"y")
+    ftp.must("MKD " + top + "/empty", 226)
+    return top
+
+
+def split_names(text):
+    """The names of an NLST listing, checking that each ends with CRLF."""
+    if not text:
+        return []
+    assert text.endswith("\r\n"), repr(text[-40:])
+    names = text[:-2].split("\r\n")
+    for name in names:
+        assert "\r" not in name and "\n" not in name, repr(name)
+    return names
+
+
+@test
+def nlst():
+    top = path("nlst")
+    expected = sorted(NLST_NAMES)
+    cases = [
+        ("NLST", expected),
+        ("NLST -a", expected),
+        ("NLST -a -l .", expected),
+        ("NLST " + top, expected),
+        ("NLST -a " + top, expected),
+        ("NLST sub dir", ["x"]),
+        ("NLST sub dir/", ["x"]),
+        ("NLST sub dir/x", ["sub dir/x"]),
+        ("NLST " + top + "/sub dir/x", [top + "/sub dir/x"]),
+        ("NLST " + NLST_NAMES[2], [NLST_NAMES[2]]),
+        ("NLST empty", []),
+        ("NLST -a empty", []),
+    ]
+    outputs = {}
+    with Ftp() as ftp:
+        make_nlst_dir(ftp, "nlst")
+        ftp.must("CWD " + top, 250)
+
+        # stream mode
+        for line, names in cases:
+            ftp.pasv()
+            text = ftp.list_s(line)
+            assert sorted(split_names(text)) == sorted(names), (line, text)
+            outputs[line] = text
+        ftp.drop_data()
+        got, lines = ftp.cmd("NLST missing")
+        assert got == 550 and len(lines) == 1, lines
+
+        # block mode
+        ftp.must("MODE B", 200)
+        ftp.pasv()
+        for i, (line, names) in enumerate(cases):
+            text, code = ftp.list_b(line)
+            assert code == (150 if i == 0 else 125), (line, code)
+            assert text == outputs[line], (line, text, outputs[line])
+        # a missing path does not touch the data connection
+        got, lines = ftp.cmd("NLST missing")
+        assert got == 550 and len(lines) == 1, lines
+        got, lines = ftp.cmd("NLST -a missing/")
+        assert got == 550 and len(lines) == 1, lines
+        assert ftp.list_b("NLST", (125,))[0] == outputs["NLST"]
+        # an empty directory is a lone EOF block
+        ftp.start("NLST empty", (125,))
+        assert recv_exact(ftp.data, 3) == EOF_BLOCK
+        ftp.finish(250, "250 Transfer complete.")
+        assert_idle(ftp.data)
+
+        # active mode
+        ftp.port()
+        assert ftp.list_b("NLST", (150,))[0] == outputs["NLST"]
+        ftp.must("MODE S", 200)
+        ftp.port()
+        assert ftp.list_s("NLST -a") == outputs["NLST -a"]
+
+
+@test
+def nlst_curl():
+    curl = shutil.which("curl")
+    if not curl:
+        raise Skip("curl not found")
+    big = ["file-%04d-%s" % (i, "y" * 60) for i in range(1100)]
+    with Ftp() as ftp:
+        top = make_nlst_dir(ftp, "nlst curl")
+        ftp.must("MKD " + top + "/big", 226)
+        ftp.must("MODE B", 200)
+        ftp.pasv()
+        for name in big:
+            ftp.stor_b(top + "/big/" + name, b"")
+
+    def curl_nlst(directory, *options):
+        # curl lists with NLST in ASCII mode, turning CRLF into LF
+        url = "ftp://%s:%d%s/" % (CFG.host, CFG.port, urllib.parse.quote(directory))
+        out = subprocess.run([curl, "-sS", "-l"] + list(options) + [url],
+                             stdout=subprocess.PIPE, check=True).stdout
+        return sorted(out.decode().splitlines())
+
+    names = sorted(NLST_NAMES + ["big"])
+    assert curl_nlst(top) == names
+    assert curl_nlst(top, "--ftp-method", "nocwd") == names
+    assert curl_nlst(top, "--ftp-method", "singlecwd") == names
+    assert curl_nlst(top, "-P", CFG.host) == names
+    assert curl_nlst(top + "/empty") == []
+    assert curl_nlst(top + "/sub dir") == ["x"]
+    assert curl_nlst(top + "/big") == sorted(big)
+    assert sum(len(n) + 2 for n in big) > 0xffff
+
+
+@test
 def list_many_entries():
-    # a listing larger than one block
+    # listings larger than one block
     with Ftp() as ftp:
         ftp.must("MKD " + path("biglist"), 226)
         ftp.must("CWD " + path("biglist"), 250)
@@ -748,9 +919,14 @@ def list_many_entries():
         assert len(text) > 0xffff, len(text)
         for name in names:
             assert name in text
+        nlst, _ = ftp.list_b("NLST -a", (125,))
+        assert len(nlst) > 0xffff, len(nlst)
+        assert sorted(split_names(nlst)) == names
         ftp.must("MODE S", 200)
         ftp.pasv()
         assert ftp.list_s("MLSD") == text
+        ftp.pasv()
+        assert ftp.list_s("NLST -a") == nlst
 
 
 # ---------------------------------------------------------------------------
@@ -995,6 +1171,7 @@ def main():
         proc = start_server(CFG.server, CFG.port, CFG.dir, tmp)
 
     failed = []
+    skipped = []
     try:
         selected = [t for t in TESTS if CFG.filter in t.__name__]
         for t in selected:
@@ -1002,6 +1179,9 @@ def main():
             try:
                 t()
                 print("PASS %-32s %.2fs" % (t.__name__, time.monotonic() - t0))
+            except Skip as e:
+                skipped.append(t.__name__)
+                print("SKIP %-32s %s" % (t.__name__, e))
             except Exception:
                 failed.append(t.__name__)
                 print("FAIL %s" % t.__name__)
@@ -1015,8 +1195,9 @@ def main():
         if tmp is not None:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    print("%d passed, %d failed%s" % (len(selected) - len(failed), len(failed),
-                                       (": " + ", ".join(failed)) if failed else ""))
+    print("%d passed, %d skipped, %d failed%s" % (
+        len(selected) - len(failed) - len(skipped), len(skipped), len(failed),
+        (": " + ", ".join(failed)) if failed else ""))
     return 1 if failed else 0
 
 
