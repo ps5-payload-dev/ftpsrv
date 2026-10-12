@@ -474,6 +474,19 @@ def retr_offset_bounds():
 
 
 @test
+def invalid_type_preserves_state():
+    with Ftp() as ftp:
+        ftp.must("TYPE A", 200)
+        for arg in ("X", ""):
+            ftp.must("TYPE " + arg, 501)
+            ftp.must("STOR " + path("ascii-rejected.bin"), 504)
+        ftp.must("TYPE I", 200)
+        ftp.pasv()
+        ftp.stor_s(path("type-valid.bin"), b"binary")
+    assert remote_size("ascii-rejected.bin") is None
+
+
+@test
 def mode_replies():
     with Ftp() as ftp:
         ftp.must("MODE S", 200, "200 Mode set to S.")
