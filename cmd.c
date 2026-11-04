@@ -73,7 +73,7 @@ ftp_mode_string(mode_t mode, char *buf) {
 int
 ftp_data_open(ftp_env_t *env) {
   struct sockaddr_in data_addr;
-  socklen_t addr_len;
+  socklen_t addr_len = sizeof(data_addr);
   int opt;
 
   if(env->data_fd != -1) {
